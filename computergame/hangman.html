@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hangman: Tech Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            /* overflow: hidden; Removed to allow scrolling on very small screens if needed */
+        }
+        .keyboard-btn {
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        .keyboard-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .keyboard-btn:hover:not(:disabled) {
+            background-color: #3b82f6; /* darker blue */
+        }
+        .keyboard-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+        .letter-box {
+            width: 1.75rem; /* 28px */
+            height: 2.5rem; /* 40px */
+            font-size: 1.1rem; /* 18px */
+        }
+        @media (min-width: 640px) {
+            .letter-box {
+                width: 2.5rem; /* 40px */
+                height: 3.5rem; /* 56px */
+                font-size: 1.75rem; /* 28px */
+            }
+        }
+        .robot-part {
+            position: absolute;
+            background-color: #9ca3af; /* gray-400 */
+            border-radius: 9999px;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+        .robot-part.visible {
+            opacity: 1;
+        }
+        /* Scaled down the robot and gantry */
+        .head { top: 25%; left: 50%; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 50%; border: 3px solid #4b5563; background: #e5e7eb;}
+        .body { top: calc(25% + 40px); left: 50%; transform: translateX(-50%); width: 50px; height: 60px; border-radius: 8px; border: 3px solid #4b5563; background: #d1d5db;}
+        .left-arm { top: calc(25% + 50px); left: calc(50% - 25px); transform: translateX(-100%) rotate(30deg); width: 12px; height: 50px; border-radius: 8px; border: 3px solid #4b5563; background: #d1d5db;}
+        .right-arm { top: calc(25% + 50px); left: calc(50% + 25px); transform: rotate(-30deg); width: 12px; height: 50px; border-radius: 8px; border: 3px solid #4b5563; background: #d1d5db;}
+        .left-leg { top: calc(25% + 100px); left: calc(50% - 12px); transform: translateX(-50%); width: 12px; height: 50px; border-radius: 8px; border: 3px solid #4b5563; background: #d1d5db;}
+        .right-leg { top: calc(25% + 100px); left: calc(50% + 12px); transform: translateX(-50%); width: 12px; height: 50px; border-radius: 8px; border: 3px solid #4b5563; background: #d1d5db;}
+        .antenna { top: 20%; left: 50%; transform: translateX(-50%); width: 3px; height: 15px; background: #4b5563; }
+        .antenna-ball { top: 16%; left: 50%; transform: translateX(-50%); width: 10px; height: 10px; background: #ef4444; border-radius: 50%;}
+
+        #gantry {
+            position: absolute;
+            left: 50%;
+            top: 25%;
+            transform: translate(-50%, -50%);
+            width: 150px; /* smaller */
+            height: 200px; /* smaller */
+        }
+        .gantry-top { position: absolute; top: 0; left: 20px; width: 100px; height: 8px; background: #6b7280; }
+        .gantry-side { position: absolute; top: 0; left: 20px; width: 8px; height: 150px; background: #6b7280; }
+        .gantry-hook { position: absolute; top: 8px; left: 110px; width: 3px; height: 30px; background: #6b7280; }
+    </style>
+</head>
+<body class="bg-blue-50 text-gray-800 flex flex-col items-center justify-start pt-4">
+
+    <div id="game-container" class="w-full max-w-lg mx-auto bg-white rounded-xl shadow-lg p-3 sm:p-4 text-center">
+        <h1 class="text-xl sm:text-2xl font-bold text-blue-600 mb-1">Hangman: Tech Edition</h1>
+        <p class="text-gray-500 mb-3 text-sm">Guess the word before the robot is assembled!</p>
+
+        <!-- Hangman Area -->
+        <div class="relative w-full max-w-xs mx-auto h-40 mb-3 bg-blue-100 rounded-lg">
+            <div id="gantry">
+                <div class="gantry-top"></div>
+                <div class="gantry-side"></div>
+                <div class="gantry-hook"></div>
+            </div>
+            <div id="robot-container" class="relative w-full h-full">
+                <!-- Robot parts will be added here by JS -->
+            </div>
+        </div>
+
+        <!-- Wrong Guesses Info -->
+        <div class="mb-3 h-6">
+            <p id="wrong-guesses" class="text-red-500 font-semibold text-base"></p>
+        </div>
+
+        <!-- Word Display -->
+        <div id="word-display" class="flex justify-center items-center gap-1 sm:gap-2 mb-3 flex-wrap">
+            <!-- Letter boxes will be generated here -->
+        </div>
+
+        <!-- Keyboard -->
+        <div id="keyboard" class="flex flex-col gap-1 max-w-xl mx-auto">
+            <!-- Keyboard rows will be generated here -->
+        </div>
+
+        <!-- Modal for Game Over -->
+        <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden p-4">
+            <div class="bg-white rounded-lg p-6 text-center shadow-2xl transform transition-all scale-95 max-w-sm w-full">
+                <h2 id="modal-title" class="text-2xl font-bold mb-3">You Won!</h2>
+                <p id="modal-text" class="mb-4 text-base">The word was: <span id="correct-word" class="font-bold text-blue-600"></span></p>
+                <button id="play-again-btn" class="bg-blue-500 text-white font-bold py-2 px-5 rounded-lg hover:bg-blue-600 transition-colors text-base">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const wordDisplay = document.getElementById('word-display');
+        const keyboardDiv = document.getElementById('keyboard');
+        const wrongGuessesEl = document.getElementById('wrong-guesses');
+        const robotContainer = document.getElementById('robot-container');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalText = document.getElementById('modal-text');
+        const correctWordEl = document.getElementById('correct-word');
+        const playAgainBtn = document.getElementById('play-again-btn');
+
+        const techWords = [
+            'PYTHON', 'JAVASCRIPT', 'ALGORITHM', 'DATABASE', 'API', 'FRAMEWORK', 'FRONTEND', 'BACKEND',
+            'SERVER', 'CLIENT', 'CLOUD', 'DOCKER', 'KUBERNETES', 'REACT', 'ANGULAR', 'VUE', 'GITHUB',
+            'TERMINAL', 'COMPILER', 'DEBUGGING', 'VARIABLE', 'FUNCTION', 'BOOLEAN', 'INTEGER', 'STRING'
+        ];
+
+        let secretWord = '';
+        let guessedLetters = [];
+        let wrongGuesses = 0;
+        const maxWrongGuesses = 7;
+
+        const robotParts = [
+            'head', 'body', 'left-arm', 'right-arm', 'left-leg', 'right-leg', 'antenna', 'antenna-ball'
+        ];
+
+        function selectWord() {
+            secretWord = techWords[Math.floor(Math.random() * techWords.length)];
+        }
+
+        function displayWord() {
+            wordDisplay.innerHTML = secretWord
+                .split('')
+                .map(letter => `
+                    <div class="letter-box bg-gray-200 rounded-md flex items-center justify-center font-bold text-gray-700">
+                        ${guessedLetters.includes(letter) ? letter : ''}
+                    </div>
+                `)
+                .join('');
+
+            checkWin();
+        }
+
+        function createKeyboard() {
+            const keys = 'QWERTYUIOPASDFGHJKLZXCVBNM';
+            const rows = [
+                keys.substring(0, 10),
+                keys.substring(10, 19),
+                keys.substring(19)
+            ];
+
+            keyboardDiv.innerHTML = rows.map(row => `
+                <div class="flex justify-center gap-1">
+                    ${row.split('').map(key => `
+                        <button class="keyboard-btn w-7 h-9 text-xs font-bold bg-blue-400 text-white rounded-md" data-key="${key}">${key}</button>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+        
+        function updateRobot() {
+            robotContainer.innerHTML = '';
+            // Gantry hook moves down with each wrong guess
+            const hook = document.querySelector('.gantry-hook');
+            if (hook) {
+                hook.style.height = `${30 + wrongGuesses * 10}px`;
+            }
+            
+            // Robot parts are added to the container
+            const partsToShow = robotParts.slice(0, wrongGuesses);
+            partsToShow.forEach(partClass => {
+                const partElement = document.createElement('div');
+                partElement.classList.add('robot-part', partClass);
+                robotContainer.appendChild(partElement);
+                // We trigger a reflow to ensure the transition plays
+                void partElement.offsetWidth;
+                partElement.classList.add('visible');
+            });
+        }
+
+
+        function handleGuess(e) {
+            if (e.target.tagName !== 'BUTTON') return;
+
+            const letter = e.target.dataset.key;
+            e.target.disabled = true;
+
+            if (secretWord.includes(letter)) {
+                guessedLetters.push(letter);
+                e.target.classList.remove('bg-blue-400');
+                e.target.classList.add('bg-green-500');
+            } else {
+                wrongGuesses++;
+                e.target.classList.remove('bg-blue-400');
+                e.target.classList.add('bg-red-500');
+                wrongGuessesEl.textContent = `Wrong Guesses: ${wrongGuesses} / ${maxWrongGuesses}`;
+                updateRobot();
+            }
+
+            displayWord();
+            checkLoss();
+        }
+
+        function checkWin() {
+            const allLettersGuessed = secretWord.split('').every(letter => guessedLetters.includes(letter));
+            if (allLettersGuessed) {
+                showModal(true);
+            }
+        }
+
+        function checkLoss() {
+            if (wrongGuesses >= maxWrongGuesses) {
+                showModal(false);
+            }
+        }
+
+        function showModal(isWin) {
+            modal.classList.remove('hidden');
+            if (isWin) {
+                modalTitle.textContent = 'You Won!';
+                modalText.innerHTML = `Awesome job! The word was: <span class="font-bold text-blue-600">${secretWord}</span>`;
+            } else {
+                modalTitle.textContent = 'Game Over!';
+                modalText.innerHTML = `The robot has been assembled! The word was: <span class="font-bold text-blue-600">${secretWord}</span>`;
+            }
+            // Animate modal entrance
+             setTimeout(() => modal.querySelector('div').classList.add('scale-100'), 10);
+        }
+
+        function startGame() {
+            guessedLetters = [];
+            wrongGuesses = 0;
+            wrongGuessesEl.textContent = '';
+            modal.classList.add('hidden');
+            modal.querySelector('div').classList.remove('scale-100');
+
+
+            selectWord();
+            displayWord();
+            createKeyboard();
+            updateRobot();
+            // Reset hook position
+            const hook = document.querySelector('.gantry-hook');
+             if(hook) hook.style.height = '30px';
+        }
+
+        keyboardDiv.addEventListener('click', handleGuess);
+        playAgainBtn.addEventListener('click', startGame);
+
+        // Initial game start
+        startGame();
+    </script>
+</body>
+</html>

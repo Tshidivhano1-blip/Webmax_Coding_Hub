@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Factory - Block Coding Game</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://unpkg.com/lucide-react@0.292.0/dist/lucide-react.js"></script>
+    <style>
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #1a202c;
+            color: #e2e8f0;
+            overflow: hidden;
+        }
+        .block {
+            cursor: grab;
+            padding: 0.75rem 1rem;
+            margin-bottom: 0.5rem;
+            border-radius: 0.375rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            font-size: 0.875rem;
+            min-height: 44px;
+        }
+        .block.block-sequence { background-color: #3b82f6; }
+        .block.block-loop { background-color: #ec4899; }
+        .block.block-conditional { background-color: #f59e0b; }
+        .block.block-variable { background-color: #8b5cf6; }
+        .block.block-function { background-color: #10b981; }
+        .block .nested-workspace {
+            min-height: 50px;
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            border-radius: 0.25rem;
+            background-color: rgba(0,0,0,0.2);
+            flex-grow: 1;
+        }
+        .block-palette .block { cursor: pointer; }
+        .sortable-ghost {
+            opacity: 0.4;
+            background-color: #4a5568;
+        }
+        .conveyor-belt {
+            background-color: #4a5568;
+            background-image: linear-gradient(45deg, #2d3748 25%, transparent 25%, transparent 75%, #2d3748 75%, #2d3748),
+                              linear-gradient(45deg, #2d3748 25%, transparent 25%, transparent 75%, #2d3748 75%, #2d3748);
+            background-size: 30px 30px;
+            background-position: 0 0, 15px 15px;
+            animation: move-conveyor 2s linear infinite;
+        }
+        @keyframes move-conveyor {
+            from { background-position: 0 0, 15px 15px; }
+            to { background-position: 30px 0, 45px 15px; }
+        }
+        .robot-arm {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform-origin: bottom center;
+            transition: transform 0.5s ease-in-out;
+        }
+        .robot-base { width: 120px; height: 30px; background: #718096; border-radius: 10px 10px 0 0; }
+        .robot-segment1 { width: 20px; height: 100px; background: #a0aec0; margin: 0 auto; }
+        .robot-gripper { width: 40px; height: 20px; background: #a0aec0; margin: 0 auto; border-radius: 0 0 5px 5px; position: relative; }
+        .robot-gripper::before, .robot-gripper::after {
+            content: ''; position: absolute; width: 8px; height: 20px; background: #718096; bottom: 0; transition: transform 0.3s;
+        }
+        .robot-gripper::before { left: -8px; border-radius: 5px 0 0 5px; }
+        .robot-gripper::after { right: -8px; border-radius: 0 5px 5px 0; }
+        .robot-gripper.closed::before { transform: translateX(5px); }
+        .robot-gripper.closed::after { transform: translateX(-5px); }
+        .factory-item {
+            font-size: 2rem;
+            transition: all 0.5s ease-in-out;
+            position: absolute;
+        }
+        .gear { animation: spin 2s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .broken { opacity: 0.5; filter: grayscale(1); }
+        .block-input {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 4px;
+            width: 40px;
+            text-align: center;
+            margin: 0 8px;
+            color: white;
+        }
+    </style>
+</head>
+<body class="w-screen h-screen p-4 flex flex-col">
+
+    <!-- Header and Controls -->
+    <header class="flex justify-between items-center mb-4 flex-shrink-0">
+        <h1 class="text-2xl font-bold text-yellow-400 flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M17 18h1"/><path d="M12 18h1"/><path d="M7 18h1"/></svg>
+            Code Factory
+        </h1>
+        <div class="flex items-center space-x-4">
+            <a href="#" id="home-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                Home
+            </a>
+            <div class="flex items-center">
+                <label for="level-select" class="mr-2 text-sm">Level:</label>
+                <select id="level-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm"></select>
+            </div>
+            <button id="run-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Run
+            </button>
+            <button id="reset-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2"><path d="M3 2v6h6"></path><path d="M21 12A9 9 0 0 0 6 5.3L3 8"></path><path d="M21 22v-6h-6"></path><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"></path></svg>
+                Reset
+            </button>
+        </div>
+    </header>
+
+    <!-- Instructions -->
+    <div id="instructions-container" class="bg-gray-800 border border-gray-700 p-3 rounded mb-4 flex-shrink-0">
+        <h2 id="level-title" class="text-lg font-bold text-yellow-300"></h2>
+        <p id="level-concept" class="text-sm text-gray-400 mb-2"></p>
+        <p id="level-challenge" class="text-base"></p>
+    </div>
+
+    <!-- Main Content -->
+    <main class="flex-grow grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-0">
+        <!-- Palette & Workspace -->
+        <div class="lg:col-span-1 md:col-span-1 grid grid-rows-2 gap-4 min-h-0">
+            <!-- Block Palette -->
+            <div class="bg-gray-900/50 p-4 rounded-lg overflow-y-auto">
+                <h3 class="font-bold mb-2 border-b border-gray-700 pb-1">Available Blocks</h3>
+                <div id="block-palette" class="block-palette"></div>
+            </div>
+            <!-- Workspace -->
+            <div class="bg-gray-900/50 p-4 rounded-lg overflow-y-auto">
+                <h3 class="font-bold mb-2 border-b border-gray-700 pb-1">Workspace</h3>
+                <div id="workspace" class="min-h-full"></div>
+            </div>
+        </div>
+
+        <!-- Factory Visualization -->
+        <div id="factory" class="lg:col-span-2 md:col-span-1 bg-gray-800 rounded-lg p-4 relative overflow-hidden border-4 border-gray-900">
+            <div id="factory-floor" class="w-full h-full relative">
+                <!-- Conveyor Belt -->
+                <div class="conveyor-belt absolute bottom-1/4 left-0 w-full h-16 border-y-4 border-gray-600"></div>
+                <!-- Packaging Area -->
+                <div id="packaging-area" class="absolute top-4 right-4 text-center">
+                    <div id="box" class="w-32 h-32 bg-yellow-800 border-4 border-yellow-900 rounded-lg relative flex items-center justify-center text-4xl text-yellow-300">
+                        <div id="box-lid" class="w-full h-full bg-yellow-800 absolute top-0 left-0 origin-top" style="transition: transform 0.5s; transform: rotateX(-120deg);"></div>
+                        📦
+                    </div>
+                    <p class="text-sm mt-2 font-bold">Packaging</p>
+                </div>
+                <!-- Part Bin -->
+                <div id="part-bin" class="absolute bottom-4 left-4 text-center">
+                    <div class="w-24 h-24 bg-gray-700 border-4 border-gray-600 rounded-lg flex items-center justify-center text-4xl">
+                        🔩
+                    </div>
+                    <p class="text-sm mt-2 font-bold">Part Bin</p>
+                </div>
+                <!-- Robot -->
+                <div class="robot-arm" style="left: calc(50% - 60px); bottom: 25%;">
+                    <div class="robot-base"></div>
+                    <div class="robot-segment1"></div>
+                    <div id="robot-gripper" class="robot-gripper"></div>
+                </div>
+                <!-- Quality Check Area -->
+                 <div id="quality-check-area" class="absolute top-10 left-10 text-center">
+                    <div class="w-24 h-24 border-4 border-dashed border-yellow-500 rounded-lg flex items-center justify-center">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-yellow-500"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    </div>
+                    <p class="text-sm mt-2 font-bold">Quality Check</p>
+                </div>
+                <!-- Counter Display -->
+                <div id="counter-display" class="absolute top-4 left-1/2 -translate-x-1/2 bg-gray-900 px-4 py-2 rounded-lg text-2xl font-bold hidden">
+                    Toys Packed: <span id="counter-value">0</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Success Modal -->
+    <div id="success-modal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-8 text-center border-2 border-green-500 shadow-lg">
+            <h2 class="text-3xl font-bold text-green-400 mb-4">Level Complete!</h2>
+            <p id="success-message" class="text-lg mb-6"></p>
+            <button id="next-level-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded">Next Level</button>
+        </div>
+    </div>
+
+    <script>
+        const levels = [
+            {
+                id: 1,
+                title: 'Level 1: Place a Part',
+                concept: 'Sequencing (basic commands)',
+                challenge: 'Command the robot to place 3 gears on the conveyor belt in order.',
+                availableBlocks: ['place_part_gear'],
+                solution: { actions: ['place_part_gear', 'place_part_gear', 'place_part_gear'] }
+            },
+            {
+                id: 2,
+                title: 'Level 2: Assemble and Pack',
+                concept: 'Sequencing with multiple commands',
+                challenge: 'Assemble the toy, then move it into the box.',
+                availableBlocks: ['assemble_toy', 'pack_box'],
+                solution: { actions: ['assemble_toy', 'pack_box'] }
+            },
+            {
+                id: 3,
+                title: 'Level 3: Repeat Assembly',
+                concept: 'Introduction to loops',
+                challenge: 'Use a repeat block to place 5 screws instead of dragging 5 individual blocks.',
+                availableBlocks: ['place_part_screw', 'repeat'],
+                solution: { actions: Array(5).fill('place_part_screw') }
+            },
+            {
+                id: 4,
+                title: 'Level 4: Production Line Grid',
+                concept: 'Nested loops',
+                challenge: 'Use nested loops to fill a 3x3 tray with toy parts.',
+                availableBlocks: ['place_part_toy', 'repeat'],
+                solution: { actions: Array(9).fill('place_part_toy') }
+            },
+            {
+                id: 5,
+                title: 'Level 5: Quality Check',
+                concept: 'Conditionals (If statements)',
+                challenge: 'If the item is broken, fix it; else, move it to the packaging area.',
+                availableBlocks: ['if_broken', 'fix_item', 'pack_box'],
+                solution: { check: (actions, state) => state.itemWasBroken ? actions.includes('fix_item') && actions.includes('pack_box') : !actions.includes('fix_item') && actions.includes('pack_box')}
+            },
+            {
+                id: 6,
+                title: 'Level 6: Count Completed Products',
+                concept: 'Variables + counters',
+                challenge: 'Use a counter variable to track finished toys until you’ve packed 5.',
+                availableBlocks: ['set_variable', 'increment_variable', 'assemble_toy', 'pack_box', 'repeat_until_equal'],
+                solution: { packedCount: 5 }
+            },
+            {
+                id: 7,
+                title: 'Level 7: Packing Function',
+                concept: 'Functions',
+                challenge: 'Create a "pack box" function that packs an item and use it to store multiple toys.',
+                availableBlocks: ['assemble_toy', 'define_function', 'call_function', 'pack_box'],
+                solution: { packedCount: 3, usedFunction: true }
+            },
+            {
+                id: 8,
+                title: 'Level 8: Final Production Run',
+                concept: 'Combining all concepts',
+                challenge: 'Assemble parts, check for defects, and pack 5 complete toys.',
+                availableBlocks: ['assemble_toy', 'if_broken', 'fix_item', 'pack_box', 'repeat'],
+                solution: { packedCount: 5 }
+            }
+        ];
+
+        const blockTemplates = {
+            'place_part_gear': { text: 'Place Gear ⚙️', type: 'sequence' },
+            'place_part_screw': { text: 'Place Screw 🔩', type: 'sequence' },
+            'place_part_toy': { text: 'Place Toy Part 🧸', type: 'sequence' },
+            'assemble_toy': { text: 'Assemble Toy 🤖', type: 'sequence' },
+            'pack_box': { text: 'Pack Box 📦', type: 'sequence' },
+            'fix_item': { text: 'Fix Item 🛠️', type: 'sequence' },
+            'repeat': { text: 'Repeat <input class="block-input" type="number" value="3" min="1"> times', type: 'loop', nested: true, fields: ['count'] },
+            'if_broken': { text: 'If Item is Broken', type: 'conditional', nested: true, else: true },
+            'set_variable': { text: 'Set variable <input class="block-input" type="text" value="count"> to 0', type: 'variable', fields: ['varName'] },
+            'increment_variable': { text: 'Increment variable <input class="block-input" type="text" value="count">', type: 'variable', fields: ['varName'] },
+            'repeat_until_equal': { text: 'Repeat until <input class="block-input" type="text" value="count"> = <input class="block-input" type="number" value="5">', type: 'loop', nested: true, fields: ['varName', 'value']},
+            'define_function': { text: 'Function: <input class="block-input" type="text" value="pack_toy">', type: 'function', nested: true, fields: ['funcName'] },
+            'call_function': { text: 'Call Function: <input class="block-input" type="text" value="pack_toy">', type: 'function', fields: ['funcName'] }
+        };
+
+        let currentLevel = 1;
+        let workspaceSortable;
+        let paletteSortable;
+        let gameState = {};
+
+        const DOMElements = {
+            levelSelect: document.getElementById('level-select'),
+            levelTitle: document.getElementById('level-title'),
+            levelConcept: document.getElementById('level-concept'),
+            levelChallenge: document.getElementById('level-challenge'),
+            blockPalette: document.getElementById('block-palette'),
+            workspace: document.getElementById('workspace'),
+            runBtn: document.getElementById('run-btn'),
+            resetBtn: document.getElementById('reset-btn'),
+            factoryFloor: document.getElementById('factory-floor'),
+            robotGripper: document.getElementById('robot-gripper'),
+            boxLid: document.getElementById('box-lid'),
+            successModal: document.getElementById('success-modal'),
+            successMessage: document.getElementById('success-message'),
+            nextLevelBtn: document.getElementById('next-level-btn'),
+            counterDisplay: document.getElementById('counter-display'),
+            counterValue: document.getElementById('counter-value'),
+            qualityCheckArea: document.getElementById('quality-check-area')
+        };
+        
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function createBlockElement(id) {
+            const template = blockTemplates[id];
+            if (!template) return null;
+
+            const block = document.createElement('div');
+            block.className = `block block-${template.type}`;
+            block.dataset.id = id;
+            block.innerHTML = `<span>${template.text}</span>`;
+            
+            if (template.nested) {
+                const nestedDiv = document.createElement('div');
+                nestedDiv.className = 'nested-workspace ml-4 mt-2 border-l-2 border-gray-500 pl-2';
+                nestedDiv.dataset.nested = 'true';
+                block.appendChild(nestedDiv);
+                
+                if (template.else) {
+                    const elseLabel = document.createElement('div');
+                    elseLabel.textContent = 'Else';
+                    elseLabel.className = 'mt-2 text-sm font-bold';
+                    block.appendChild(elseLabel);
+                    const elseDiv = document.createElement('div');
+                    elseDiv.className = 'nested-workspace ml-4 mt-2 border-l-2 border-gray-500 pl-2';
+                    elseDiv.dataset.nested = 'else';
+                    block.appendChild(elseDiv);
+                }
+            }
+            return block;
+        }
+
+        function initSortable(container) {
+            return new Sortable(container, {
+                group: 'blocks',
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                onAdd: (evt) => {
+                    // Re-initialize sortable on nested workspaces when a block is added
+                    if (evt.item.querySelector('.nested-workspace')) {
+                        evt.item.querySelectorAll('.nested-workspace').forEach(initSortable);
+                    }
+                }
+            });
+        }
+        
+        function setupPalette() {
+            DOMElements.blockPalette.innerHTML = '';
+            const level = levels[currentLevel - 1];
+            level.availableBlocks.forEach(blockId => {
+                const block = createBlockElement(blockId);
+                // Removed the click listener to enable drag-and-drop via SortableJS
+                DOMElements.blockPalette.appendChild(block);
+            });
+        }
+        
+        function resetFactory() {
+            DOMElements.factoryFloor.querySelectorAll('.factory-item').forEach(el => el.remove());
+            DOMElements.boxLid.style.transform = 'rotateX(-120deg)';
+            DOMElements.counterDisplay.classList.add('hidden');
+            DOMElements.qualityCheckArea.classList.remove('border-red-500', 'border-green-500');
+            gameState = {
+                actions: [],
+                variables: {},
+                functions: {},
+                packedCount: 0,
+                usedFunction: false,
+                itemsOnConveyor: 0,
+            };
+            if(currentLevel === 5 || currentLevel === 8){
+                 gameState.itemIsBroken = Math.random() < 0.5;
+                 gameState.itemWasBroken = gameState.itemIsBroken; // Store initial state for check
+            }
+        }
+
+        function loadLevel(levelNum) {
+            currentLevel = levelNum;
+            const level = levels[levelNum - 1];
+
+            DOMElements.levelTitle.textContent = level.title;
+            DOMElements.levelConcept.textContent = level.concept;
+            DOMElements.levelChallenge.textContent = level.challenge;
+            DOMElements.workspace.innerHTML = '';
+            
+            if(workspaceSortable) workspaceSortable.destroy();
+            workspaceSortable = initSortable(DOMElements.workspace);
+            
+            setupPalette();
+
+            // Initialize the palette to allow cloning blocks into the workspace
+            if(paletteSortable) paletteSortable.destroy();
+            paletteSortable = new Sortable(DOMElements.blockPalette, {
+                group: {
+                    name: 'blocks',
+                    pull: 'clone', // Clone the item when dragging out
+                    put: false // Do not allow items to be dropped back into the palette
+                },
+                animation: 150,
+                sort: false, // Do not sort the items in the palette
+                ghostClass: 'sortable-ghost'
+            });
+            
+            resetFactory();
+        }
+
+        function populateLevelSelector() {
+            levels.forEach(level => {
+                const option = document.createElement('option');
+                option.value = level.id;
+                option.textContent = `Level ${level.id}: ${level.title.split(':')[1].trim()}`;
+                DOMElements.levelSelect.appendChild(option);
+            });
+            DOMElements.levelSelect.value = currentLevel;
+        }
+
+        async function runAnimation(action, ...args) {
+            const gripper = DOMElements.robotGripper;
+            // Robot animation logic
+            gripper.classList.add('closed');
+            await sleep(300);
+
+            switch (action) {
+                case 'place_part_gear':
+                case 'place_part_screw':
+                case 'place_part_toy':
+                    const item = document.createElement('div');
+                    item.className = 'factory-item';
+                    item.style.bottom = '28%';
+                    item.style.left = `${10 + gameState.itemsOnConveyor * 15}%`;
+                    if (action === 'place_part_gear') item.innerHTML = '⚙️';
+                    if (action === 'place_part_screw') item.innerHTML = '🔩';
+                    if (action === 'place_part_toy') item.innerHTML = '🧸';
+                    DOMElements.factoryFloor.appendChild(item);
+                    gameState.itemsOnConveyor++;
+                    break;
+                case 'assemble_toy':
+                    const toy = document.createElement('div');
+                    toy.className = 'factory-item';
+                    toy.innerHTML = '🤖';
+                    toy.style.bottom = '28%';
+                    toy.style.left = '50%';
+                    if (gameState.itemIsBroken) toy.classList.add('broken');
+                    DOMElements.factoryFloor.appendChild(toy);
+                    break;
+                case 'pack_box':
+                    const itemToPack = DOMElements.factoryFloor.querySelector('.factory-item:not(.packed)');
+                    if (itemToPack) {
+                        itemToPack.style.top = '10%';
+                        itemToPack.style.right = '5%';
+                        itemToPack.style.left = 'auto';
+                        itemToPack.style.bottom = 'auto';
+                        itemToPack.classList.add('packed');
+                        await sleep(500);
+                        itemToPack.style.opacity = '0';
+                        DOMElements.boxLid.style.transform = 'rotateX(0deg)';
+                        await sleep(500);
+                        DOMElements.boxLid.style.transform = 'rotateX(-120deg)';
+                        gameState.packedCount++;
+                    }
+                    break;
+                case 'fix_item':
+                    const brokenItem = DOMElements.factoryFloor.querySelector('.broken');
+                    if (brokenItem) {
+                        brokenItem.classList.remove('broken');
+                        gameState.itemIsBroken = false;
+                    }
+                    break;
+            }
+            gripper.classList.remove('closed');
+            await sleep(300);
+        }
+
+        async function executeBlocks(container) {
+            const blocks = [...container.children];
+            for (const block of blocks) {
+                const id = block.dataset.id;
+                gameState.actions.push(id);
+                
+                const nestedWorkspace = block.querySelector('.nested-workspace[data-nested="true"]');
+                const elseWorkspace = block.querySelector('.nested-workspace[data-nested="else"]');
+
+                switch (id) {
+                    case 'repeat': {
+                        const count = block.querySelector('input').value || 1;
+                        for (let i = 0; i < count; i++) {
+                            if (nestedWorkspace) await executeBlocks(nestedWorkspace);
+                        }
+                        break;
+                    }
+                    case 'if_broken':
+                        if (gameState.itemIsBroken) {
+                            if (nestedWorkspace) await executeBlocks(nestedWorkspace);
+                        } else {
+                            if (elseWorkspace) await executeBlocks(elseWorkspace);
+                        }
+                        break;
+                    case 'set_variable': {
+                        const varName = block.querySelector('input').value;
+                        gameState.variables[varName] = 0;
+                        DOMElements.counterDisplay.classList.remove('hidden');
+                        DOMElements.counterValue.textContent = 0;
+                        break;
+                    }
+                    case 'increment_variable': {
+                        const varName = block.querySelector('input').value;
+                        if (typeof gameState.variables[varName] === 'number') {
+                            gameState.variables[varName]++;
+                            DOMElements.counterValue.textContent = gameState.variables[varName];
+                        }
+                        break;
+                    }
+                    case 'repeat_until_equal': {
+                        const varName = block.querySelector('input[type="text"]').value;
+                        const value = Number(block.querySelector('input[type="number"]').value);
+                        let guard = 0;
+                        while(gameState.variables[varName] < value && guard < 100) {
+                             if (nestedWorkspace) await executeBlocks(nestedWorkspace);
+                             guard++;
+                        }
+                        break;
+                    }
+                    case 'define_function': {
+                        const funcName = block.querySelector('input').value;
+                        gameState.functions[funcName] = nestedWorkspace;
+                        break;
+                    }
+                    case 'call_function': {
+                        const funcName = block.querySelector('input').value;
+                        if(gameState.functions[funcName]) {
+                            gameState.usedFunction = true;
+                            await executeBlocks(gameState.functions[funcName]);
+                        }
+                        break;
+                    }
+                    default:
+                        await runAnimation(id);
+                        break;
+                }
+                 await sleep(200);
+            }
+        }
+        
+        function checkSolution() {
+            const level = levels[currentLevel - 1];
+            const sol = level.solution;
+            let success = false;
+
+            if (sol.actions) {
+                success = sol.actions.length === gameState.actions.length && sol.actions.every((v, i) => v === gameState.actions[i]);
+                // For level 3, the block sequence won't match, so check action sequence
+                if(currentLevel === 3) {
+                     success = gameState.actions.filter(a => a.includes('place_part')).length === 5;
+                }
+                if(currentLevel === 4) {
+                     success = gameState.actions.filter(a => a.includes('place_part')).length === 9;
+                }
+            } else if (sol.check) {
+                success = sol.check(gameState.actions, gameState);
+            } else if (sol.packedCount) {
+                success = gameState.packedCount >= sol.packedCount;
+                if(sol.usedFunction) {
+                    success = success && gameState.usedFunction;
+                }
+            }
+            
+            if (success) {
+                const successMessages = [
+                    "⚙️ Great job! The assembly line is running smoothly!",
+                    "📦 Perfect! You packed all the toys!",
+                    "💡 Fantastic! Your logic is flawless!",
+                    "🤖 Robot approved! Production is at 100%!"
+                ];
+                DOMElements.successMessage.textContent = successMessages[Math.floor(Math.random() * successMessages.length)];
+                if (currentLevel === levels.length) {
+                    DOMElements.nextLevelBtn.textContent = "Play Again";
+                } else {
+                    DOMElements.nextLevelBtn.textContent = "Next Level";
+                }
+                DOMElements.successModal.classList.remove('hidden');
+            } else {
+                alert("Not quite right. Reset and try again!");
+            }
+        }
+
+        DOMElements.runBtn.addEventListener('click', async () => {
+            DOMElements.runBtn.disabled = true;
+            DOMElements.resetBtn.disabled = true;
+            resetFactory();
+            await executeBlocks(DOMElements.workspace);
+            checkSolution();
+            DOMElements.runBtn.disabled = false;
+            DOMElements.resetBtn.disabled = false;
+        });
+        
+        DOMElements.resetBtn.addEventListener('click', () => {
+            loadLevel(currentLevel);
+        });
+
+        DOMElements.levelSelect.addEventListener('change', (e) => {
+            loadLevel(parseInt(e.target.value));
+        });
+        
+        DOMElements.nextLevelBtn.addEventListener('click', () => {
+            DOMElements.successModal.classList.add('hidden');
+            if (currentLevel < levels.length) {
+                currentLevel++;
+            } else {
+                currentLevel = 1; // loop back to start
+            }
+            DOMElements.levelSelect.value = currentLevel;
+            loadLevel(currentLevel);
+        });
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            populateLevelSelector();
+            loadLevel(currentLevel);
+        });
+    </script>
+</body>
+</html>

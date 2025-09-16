@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Farm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0fdf4; /* Light green background */
+        }
+        .font-fredoka {
+            font-family: 'Fredoka One', cursive;
+        }
+        .game-block {
+            cursor: grab;
+            transition: all 0.2s ease-in-out;
+            user-select: none;
+        }
+        .game-block:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .ghost-class {
+            opacity: 0.5;
+            background: #c7d2fe;
+        }
+        .workspace .game-block, .palette .game-block {
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .nested-workspace {
+            min-height: 50px;
+            padding: 8px;
+            margin-top: 8px;
+            border-radius: 6px;
+            background-color: rgba(0, 0, 0, 0.05);
+            border: 2px dashed rgba(0,0,0,0.1);
+        }
+        .gardener {
+            position: absolute;
+            font-size: 2.5rem;
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        .garden-plot {
+            transition: all 0.3s ease-in-out;
+        }
+        .success-modal {
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.9); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes pulse {
+            50% { transform: rotate(90deg) scale(1.1); }
+        }
+    </style>
+</head>
+<body class="bg-green-50 text-gray-800">
+    <!-- Tilt Disclaimer Modal -->
+    <div id="tilt-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-8 text-center shadow-2xl max-w-md w-full">
+            <div class="text-6xl mb-4" style="animation: pulse 2s ease-in-out infinite;">🔄</div>
+            <h2 class="font-fredoka text-3xl text-green-700 mb-2">Please Rotate Your Device!</h2>
+            <p class="text-gray-600 mb-6">For the best experience, please turn your phone to landscape (horizontal) mode.</p>
+            <button id="start-game-btn" class="w-full px-6 py-3 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition-colors">Start Farming</button>
+        </div>
+    </div>
+
+    <a href="#" id="home-btn" class="absolute top-4 left-4 z-20 bg-white/70 backdrop-blur-sm p-3 rounded-full shadow-lg border border-green-200 text-2xl hover:bg-green-100 transition-colors" title="Go back to home">🏠</a>
+    <div id="game-container" class="p-4 h-screen flex flex-col">
+        <header class="text-center mb-4 flex-shrink-0">
+            <h1 class="font-fredoka text-5xl text-green-700">🌱 Coding Farm 🧑‍🌾</h1>
+            <p class="text-green-600 mt-1">Learn to code by nurturing your own virtual garden!</p>
+        </header>
+
+        <div class="w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 flex-grow">
+            <!-- Left Panel: Instructions & Levels -->
+            <div class="lg:col-span-3 bg-white/70 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-green-200 flex flex-col">
+                <div class="flex-shrink-0">
+                    <h2 class="font-fredoka text-2xl text-green-800 mb-2">Levels</h2>
+                    <div id="level-selector" class="flex flex-wrap gap-2 mb-4">
+                        <!-- Level buttons will be injected here -->
+                    </div>
+                    <hr class="border-green-200 my-4">
+                </div>
+                <div id="instructions" class="flex-grow overflow-y-auto">
+                    <h3 class="font-fredoka text-xl text-green-800 mb-2" id="level-title">Level 1: Plant a Seed</h3>
+                    <p class="text-gray-600" id="level-instructions">Drag blocks into the workspace to tell the gardener what to do. Your goal is to plant a seed in each of the tilled soil plots.</p>
+                </div>
+            </div>
+
+            <!-- Middle Panel: Garden -->
+            <div class="lg:col-span-5 flex items-center justify-center">
+                <div class="w-full bg-yellow-100/50 p-6 rounded-2xl shadow-lg border-2 border-yellow-300 relative" style="aspect-ratio: 1/1;">
+                    <div id="garden-grid" class="grid grid-cols-5 gap-1 w-full h-full bg-yellow-200/60 rounded-lg p-2">
+                        <!-- Garden plots will be injected here -->
+                    </div>
+                    <div id="gardener" class="gardener">🧑‍🌾</div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Blocks & Workspace -->
+            <div class="lg:col-span-4 flex flex-col gap-6">
+                <div class="bg-white/70 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-green-200">
+                    <h2 class="font-fredoka text-2xl text-green-800 mb-4">Blocks</h2>
+                    <div id="block-palette" class="min-h-[100px]">
+                        <!-- Blocks will be injected here -->
+                    </div>
+                </div>
+                <div class="bg-white/70 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-green-200 flex-grow flex flex-col">
+                     <div class="flex justify-between items-center mb-4 flex-shrink-0">
+                        <h2 class="font-fredoka text-2xl text-green-800">Workspace</h2>
+                        <div class="flex gap-2">
+                            <button id="run-btn" class="px-4 py-2 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition-colors">▶️ Run</button>
+                            <button id="reset-btn" class="px-4 py-2 bg-red-500 text-white font-bold rounded-lg shadow-md hover:bg-red-600 transition-colors">🔄 Reset</button>
+                        </div>
+                    </div>
+                    <div id="workspace" class="min-h-[100px] bg-green-100/50 p-4 rounded-lg flex-grow overflow-y-auto">
+                        <!-- Drop blocks here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="success-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-8 text-center shadow-2xl max-w-sm w-full success-modal">
+            <div class="text-6xl mb-4" id="success-emoji">🌻</div>
+            <h2 class="font-fredoka text-3xl text-green-700 mb-2" id="success-title">Great job!</h2>
+            <p class="text-gray-600 mb-6" id="success-message">Your garden is blooming!</p>
+            <button id="next-level-btn" class="w-full px-6 py-3 bg-green-500 text-white font-bold rounded-lg shadow-md hover:bg-green-600 transition-colors">Next Level</button>
+        </div>
+    </div>
+
+<script>
+const game = {
+    // DOM Elements
+    tiltModal: document.getElementById('tilt-modal'),
+    startGameBtn: document.getElementById('start-game-btn'),
+    levelSelector: document.getElementById('level-selector'),
+    levelTitle: document.getElementById('level-title'),
+    levelInstructions: document.getElementById('level-instructions'),
+    gardenGrid: document.getElementById('garden-grid'),
+    gardener: document.getElementById('gardener'),
+    blockPalette: document.getElementById('block-palette'),
+    workspace: document.getElementById('workspace'),
+    runBtn: document.getElementById('run-btn'),
+    resetBtn: document.getElementById('reset-btn'),
+    successModal: document.getElementById('success-modal'),
+    successEmoji: document.getElementById('success-emoji'),
+    successTitle: document.getElementById('success-title'),
+    successMessage: document.getElementById('success-message'),
+    nextLevelBtn: document.getElementById('next-level-btn'),
+
+    // Game State
+    currentLevel: 0,
+    gardenerPos: { x: 0, y: 0 },
+    gridState: [],
+    gridSize: 5,
+    isRunning: false,
+    variables: {},
+
+    levels: [
+        // LEVEL 1: Sequencing
+        {
+            title: "Plant a Seed",
+            instructions: "Command the gardener to plant 3 seeds in the soil in order. Drag the 'Plant Seed' and 'Move Right' blocks to the workspace.",
+            startPos: { x: 0, y: 2 },
+            blocks: ['plant', 'moveRight'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'tilled', 'tilled', 'tilled', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => state.filter(s => s === 'seeded').length === 3,
+            success: { emoji: '🌱', title: 'Well Done!', message: 'You planted your first seeds!' }
+        },
+        // LEVEL 2: Sequencing with multiple commands
+        {
+            title: "Plant and Water",
+            instructions: "A seed needs water to grow! Plant a seed, then water it to see it sprout.",
+            startPos: { x: 1, y: 2 },
+            blocks: ['plant', 'water', 'moveRight'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'tilled', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => state.includes('sprout'),
+            success: { emoji: '💧', title: 'It Grew!', message: 'You nurtured your first sprout!' }
+        },
+        // LEVEL 3: Introduction to loops
+        {
+            title: "Repeat Planting",
+            instructions: "Planting one by one is slow. Use a 'Repeat' block to plant all 5 seeds in the row efficiently.",
+            startPos: { x: 0, y: 2 },
+            blocks: ['plant', 'moveRight', 'repeat'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'tilled', 'tilled', 'tilled', 'tilled', 'tilled',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => state.filter(s => s === 'seeded').length === 5,
+            success: { emoji: '🔁', title: 'So Fast!', message: 'Loops make work much easier!' }
+        },
+        // LEVEL 4: Nested loops
+        {
+            title: "Garden Patch",
+            instructions: "Time for a bigger garden! Use a loop inside another loop (a nested loop) to plant a 3x3 garden patch.",
+            startPos: { x: 1, y: 1 },
+            blocks: ['plant', 'moveRight', 'moveDown', 'moveLeft', 'repeat'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'tilled', 'tilled', 'tilled', 'grass',
+                'grass', 'tilled', 'tilled', 'tilled', 'grass',
+                'grass', 'tilled', 'tilled', 'tilled', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => state.filter(s => s === 'seeded').length === 9,
+            success: { emoji: '🟩', title: 'Amazing!', message: 'You created a whole garden patch!' }
+        },
+        // LEVEL 5: Conditionals
+        {
+            title: "Check the Soil",
+            instructions: "Some plots are dry and need water, others are ready for seeds. Use the 'If Soil is Dry' block to make the right choice.",
+            startPos: { x: 0, y: 2 },
+            blocks: ['plant', 'water', 'moveRight', 'ifDry'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'dry', 'tilled', 'dry', 'tilled', 'dry',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => !state.includes('dry') && !state.includes('tilled'),
+            success: { emoji: '🤔', title: 'Smart Gardener!', message: "You used logic to tend to your garden's needs." }
+        },
+        // LEVEL 6: Harvest with Variables
+        {
+            title: "Harvest Time",
+            instructions: "Your crops are ready! Use a variable to count your harvest. Harvest until your 'veggies' counter reaches 5.",
+            startPos: { x: 0, y: 2 },
+            blocks: ['harvest', 'moveRight', 'repeat', 'setVariable', 'incrementVariable', 'ifVariable'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'crop', 'crop', 'crop', 'crop', 'crop',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state, vars) => vars.veggies === 5 && state.filter(s => s === 'crop').length === 0,
+            success: { emoji: '🥕', title: 'Bountiful Harvest!', message: 'You collected all the vegetables!' }
+        },
+        // LEVEL 7: Watering Function
+        {
+            title: "Watering Duty",
+            instructions: "Create a 'Water Row' function to water an entire row of sprouts. This saves you from repeating the same blocks!",
+            startPos: { x: 0, y: 1 },
+            blocks: ['moveRight', 'water', 'repeat', 'functionDef', 'functionCall'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'sprout', 'sprout', 'sprout', 'sprout', 'sprout',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => state.filter(s => s === 'crop').length === 5,
+            success: { emoji: '💡', title: 'Function Pro!', message: 'Functions are powerful reusable tools!' }
+        },
+         // LEVEL 8: Final Farm Cycle
+        {
+            title: "Final Farm Cycle",
+            instructions: "Combine everything you've learned! Plant seeds in the tilled soil, water the dry soil, and harvest all 5 crops.",
+            startPos: { x: 0, y: 2 },
+            blocks: ['plant', 'water', 'harvest', 'moveRight', 'repeat', 'ifDry'],
+            grid: [
+                'grass', 'grass', 'grass', 'grass', 'grass',
+                'grass', 'crop', 'crop', 'crop', 'grass',
+                'tilled', 'dry', 'tilled', 'dry', 'tilled',
+                'grass', 'crop', 'crop', 'grass', 'grass',
+                'grass', 'grass', 'grass', 'grass', 'grass',
+            ],
+            winCondition: (state) => state.filter(s => ['tilled', 'dry', 'crop'].includes(s)).length === 0,
+            success: { emoji: '🏆', title: 'You are a Master Gardener!', message: 'You have mastered the art of coding and farming!' }
+        },
+    ],
+
+    blockTemplates: {
+        plant: { html: '<span>🌱 Plant Seed</span>', color: 'bg-green-300', type: 'action' },
+        water: { html: '<span>💧 Water Plant</span>', color: 'bg-blue-300', type: 'action' },
+        harvest: { html: '<span>🥕 Harvest Crop</span>', color: 'bg-orange-300', type: 'action' },
+        moveRight: { html: '<span>➡️ Move Right</span>', color: 'bg-gray-300', type: 'action' },
+        moveLeft: { html: '<span>⬅️ Move Left</span>', color: 'bg-gray-300', type: 'action' },
+        moveUp: { html: '<span>⬆️ Move Up</span>', color: 'bg-gray-300', type: 'action' },
+        moveDown: { html: '<span>⬇️ Move Down</span>', color: 'bg-gray-300', type: 'action' },
+        repeat: {
+            html: `
+                <div class="w-full">
+                    <span>🔁 Repeat <input type="number" value="3" min="1" max="10" class="w-12 text-center rounded border border-purple-400"> times</span>
+                    <div class="nested-workspace mt-2 bg-purple-200/50 border-purple-400/50"></div>
+                </div>`,
+            color: 'bg-purple-300',
+            type: 'loop'
+        },
+        ifDry: {
+            html: `
+                <div class="w-full">
+                    <span>🤔 If Soil is Dry</span>
+                    <div class="nested-workspace mt-2 bg-yellow-200/50 border-yellow-400/50"></div>
+                </div>`,
+            color: 'bg-yellow-300',
+            type: 'conditional'
+        },
+        setVariable: {
+            html: '<span>📊 Set variable <input type="text" value="veggies" class="w-20 rounded border border-pink-400 px-1"> to 0</span>',
+            color: 'bg-pink-300',
+            type: 'variable'
+        },
+        incrementVariable: {
+            html: '<span>📈 Increment variable <input type="text" value="veggies" class="w-20 rounded border border-pink-400 px-1"></span>',
+            color: 'bg-pink-300',
+            type: 'variable'
+        },
+        ifVariable: {
+             html: `
+                <div class="w-full">
+                    <span>❓ If variable <input type="text" value="veggies" class="w-16 rounded border border-pink-400 px-1"> &lt; <input type="number" value="5" class="w-12 text-center rounded border border-pink-400"></span>
+                    <div class="nested-workspace mt-2 bg-pink-200/50 border-pink-400/50"></div>
+                </div>`,
+            color: 'bg-pink-300',
+            type: 'conditional'
+        },
+        functionDef: {
+            html: `
+                <div class="w-full">
+                    <span>🔧 Define Function: <input type="text" value="waterRow" class="w-24 rounded border border-teal-400 px-1"></span>
+                    <div class="nested-workspace mt-2 bg-teal-200/50 border-teal-400/50"></div>
+                </div>`,
+            color: 'bg-teal-300',
+            type: 'functionDef'
+        },
+        functionCall: {
+            html: '<span>▶️ Call Function: <input type="text" value="waterRow" class="w-24 rounded border border-teal-400 px-1"></span>',
+            color: 'bg-teal-300',
+            type: 'functionCall'
+        },
+    },
+
+    plotContent: {
+        grass: '🟫',
+        tilled: '🟫',
+        dry: '🟧',
+        seeded: '🌱',
+        sprout: '🌿',
+        crop: '🥕',
+    },
+
+    functions: {},
+
+    // Methods
+    init() {
+        // Event Listeners
+        this.startGameBtn.addEventListener('click', () => {
+            this.tiltModal.classList.add('hidden');
+        });
+        this.runBtn.addEventListener('click', () => this.runCode());
+        this.resetBtn.addEventListener('click', () => this.loadLevel(this.currentLevel));
+        this.nextLevelBtn.addEventListener('click', () => {
+            this.successModal.classList.add('hidden');
+            this.loadLevel(this.currentLevel + 1);
+        });
+
+        // Initialize SortableJS
+        this.initSortable();
+
+        // Create Level Buttons
+        this.levels.forEach((_, index) => {
+            const button = document.createElement('button');
+            button.innerText = index + 1;
+            button.className = 'w-10 h-10 rounded-full font-bold transition-colors';
+            button.dataset.level = index;
+            button.addEventListener('click', () => this.loadLevel(index));
+            this.levelSelector.appendChild(button);
+        });
+
+        // Load first level
+        this.loadLevel(0);
+    },
+
+    initSortable() {
+        new Sortable(this.blockPalette, {
+            group: { name: 'shared', pull: 'clone', put: false },
+            animation: 150,
+            sort: false,
+            ghostClass: 'ghost-class',
+            onEnd: (evt) => {
+                // When cloning a complex block, make its nested area sortable too
+                if (evt.to.id === 'workspace' || evt.to.classList.contains('nested-workspace')) {
+                    const nested = evt.item.querySelector('.nested-workspace');
+                    if (nested) {
+                        new Sortable(nested, {
+                            group: 'shared',
+                            animation: 150,
+                            ghostClass: 'ghost-class',
+                        });
+                    }
+                }
+            }
+        });
+
+        new Sortable(this.workspace, {
+            group: 'shared',
+            animation: 150,
+            ghostClass: 'ghost-class'
+        });
+    },
+
+    loadLevel(levelIndex) {
+        if (levelIndex >= this.levels.length) levelIndex = this.levels.length - 1;
+        this.currentLevel = levelIndex;
+        const level = this.levels[this.currentLevel];
+        
+        // Update UI
+        this.levelTitle.textContent = `Level ${levelIndex + 1}: ${level.title}`;
+        this.levelInstructions.textContent = level.instructions;
+        this.workspace.innerHTML = '';
+        this.isRunning = false;
+
+        // Update level button styles
+        Array.from(this.levelSelector.children).forEach((btn, idx) => {
+            btn.className = `w-10 h-10 rounded-full font-bold transition-colors ${idx === this.currentLevel ? 'bg-green-500 text-white' : 'bg-green-200 text-green-700 hover:bg-green-300'}`;
+        });
+        
+        // Load initial state
+        this.gardenerPos = { ...level.startPos };
+        this.gridState = [...level.grid];
+        this.variables = {};
+        this.functions = {};
+
+        this.renderAll();
+    },
+
+    renderAll() {
+        this.renderGarden();
+        this.renderGardener();
+        this.renderBlockPalette();
+    },
+
+    renderGarden() {
+        this.gardenGrid.innerHTML = '';
+        this.gardenGrid.style.gridTemplateColumns = `repeat(${this.gridSize}, 1fr)`;
+        this.gridState.forEach(plotType => {
+            const plot = document.createElement('div');
+            plot.className = 'garden-plot flex items-center justify-center text-3xl rounded-md';
+            plot.textContent = this.plotContent[plotType] || ' ';
+            const bgColors = {
+                grass: 'bg-green-600',
+                tilled: 'bg-yellow-700',
+                dry: 'bg-orange-300',
+            }
+            plot.classList.add(bgColors[plotType] || 'bg-yellow-700');
+            this.gardenGrid.appendChild(plot);
+        });
+    },
+    
+    renderGardener() {
+        const plotSize = this.gardenGrid.clientWidth / this.gridSize;
+        this.gardener.style.left = `${this.gardenerPos.x * plotSize}px`;
+        this.gardener.style.top = `${this.gardenerPos.y * plotSize}px`;
+        this.gardener.style.width = `${plotSize}px`;
+        this.gardener.style.height = `${plotSize}px`;
+    },
+
+    renderBlockPalette() {
+        this.blockPalette.innerHTML = '';
+        const level = this.levels[this.currentLevel];
+        level.blocks.forEach(blockId => {
+            const template = this.blockTemplates[blockId];
+            const blockEl = document.createElement('div');
+            blockEl.className = `game-block ${template.color}`;
+            blockEl.dataset.type = blockId;
+            blockEl.innerHTML = template.html;
+            this.blockPalette.appendChild(blockEl);
+        });
+    },
+
+    async runCode() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+        this.runBtn.disabled = true;
+        this.resetBtn.disabled = true;
+
+        const blocks = this.workspace.children;
+        await this.executeBlocks(blocks);
+        
+        this.isRunning = false;
+        this.runBtn.disabled = false;
+        this.resetBtn.disabled = false;
+        this.checkWinCondition();
+    },
+
+    async executeBlocks(blocks) {
+        for (const block of blocks) {
+            if (!this.isRunning) break;
+            const type = block.dataset.type;
+            
+            block.classList.add('bg-yellow-300'); // Highlight current block
+
+            switch (type) {
+                case 'plant':
+                    await this.performAction('plant');
+                    break;
+                case 'water':
+                    await this.performAction('water');
+                    break;
+                case 'harvest':
+                    await this.performAction('harvest');
+                    break;
+                case 'moveRight':
+                    this.gardenerPos.x = Math.min(this.gridSize - 1, this.gardenerPos.x + 1);
+                    break;
+                case 'moveLeft':
+                    this.gardenerPos.x = Math.max(0, this.gardenerPos.x - 1);
+                    break;
+                case 'moveUp':
+                    this.gardenerPos.y = Math.max(0, this.gardenerPos.y - 1);
+                    break;
+                case 'moveDown':
+                    this.gardenerPos.y = Math.min(this.gridSize - 1, this.gardenerPos.y + 1);
+                    break;
+                case 'repeat':
+                    const count = block.querySelector('input').value;
+                    const nestedBlocks = block.querySelector('.nested-workspace').children;
+                    for (let i = 0; i < count; i++) {
+                        await this.executeBlocks(nestedBlocks);
+                         if (!this.isRunning) break;
+                    }
+                    break;
+                case 'ifDry':
+                    const currentPlotIndex = this.gardenerPos.y * this.gridSize + this.gardenerPos.x;
+                    if (this.gridState[currentPlotIndex] === 'dry') {
+                        const ifBlocks = block.querySelector('.nested-workspace').children;
+                        await this.executeBlocks(ifBlocks);
+                    }
+                    break;
+                case 'setVariable':
+                    const varNameSet = block.querySelector('input').value;
+                    this.variables[varNameSet] = 0;
+                    console.log('Variables:', this.variables);
+                    break;
+                case 'incrementVariable':
+                    const varNameInc = block.querySelector('input').value;
+                    if (typeof this.variables[varNameInc] === 'number') {
+                        this.variables[varNameInc]++;
+                    }
+                    console.log('Variables:', this.variables);
+                    break;
+                case 'ifVariable':
+                    const inputs = block.querySelectorAll('input');
+                    const varNameIf = inputs[0].value;
+                    const valueIf = parseInt(inputs[1].value, 10);
+                    if (this.variables[varNameIf] < valueIf) {
+                        const ifVarBlocks = block.querySelector('.nested-workspace').children;
+                        await this.executeBlocks(ifVarBlocks);
+                    }
+                    break;
+                case 'functionDef':
+                    const funcName = block.querySelector('input').value;
+                    const funcBlocks = block.querySelector('.nested-workspace').children;
+                    this.functions[funcName] = funcBlocks;
+                    break;
+                case 'functionCall':
+                    const callName = block.querySelector('input').value;
+                    if (this.functions[callName]) {
+                        await this.executeBlocks(this.functions[callName]);
+                    }
+                    break;
+            }
+
+            this.renderGardener();
+            block.classList.remove('bg-yellow-300');
+            await this.delay(500);
+        }
+    },
+
+    async performAction(action) {
+        const index = this.gardenerPos.y * this.gridSize + this.gardenerPos.x;
+        const currentPlot = this.gridState[index];
+        let newState = currentPlot;
+
+        if (action === 'plant' && currentPlot === 'tilled') newState = 'seeded';
+        if (action === 'water' && currentPlot === 'seeded') newState = 'sprout';
+        if (action === 'water' && currentPlot === 'sprout') newState = 'crop';
+        if (action === 'water' && currentPlot === 'dry') newState = 'tilled';
+        if (action === 'harvest' && currentPlot === 'crop') {
+            newState = 'tilled';
+            // Also handle variable increment if it's part of the action itself in later levels
+            if (this.variables.hasOwnProperty('veggies')) {
+                 this.variables.veggies++;
+                 console.log('Harvested! Veggies:', this.variables.veggies);
+            }
+        }
+        
+        this.gridState[index] = newState;
+        this.renderGarden();
+    },
+
+    checkWinCondition() {
+        const level = this.levels[this.currentLevel];
+        if (level.winCondition(this.gridState, this.variables)) {
+            const success = level.success;
+            this.successEmoji.textContent = success.emoji;
+            this.successTitle.textContent = success.title;
+            this.successMessage.textContent = success.message;
+            this.nextLevelBtn.style.display = (this.currentLevel < this.levels.length - 1) ? 'block' : 'none';
+            this.successModal.classList.remove('hidden');
+        } else {
+            console.log("Not quite! Try again.");
+        }
+    },
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+};
+
+// Start the game when the window loads
+window.onload = () => game.init();
+
+</script>
+</body>
+</html>

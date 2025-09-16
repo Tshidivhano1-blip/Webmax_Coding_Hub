@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Balloon Pop Math</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background: linear-gradient(to bottom, #87CEEB 0%, #ADD8E6 100%); /* Sky blue gradient */
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Centers game-container horizontally */
+            min-height: 100vh; /* Ensures background covers full height */
+            margin: 0;
+            padding: 20px; /* Added padding for spacing when content might be close to viewport edges */
+            overflow-y: auto; /* Allow vertical scrolling if content is taller than viewport */
+            overflow-x: hidden; /* Prevent horizontal scrolling */
+            color: #333;
+        }
+        .game-container {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+            position: relative; /* For positioning game elements */
+            margin-top: auto; /* For vertical centering when content is shorter than viewport */
+            margin-bottom: auto; /* For vertical centering */
+        }
+        .problem-area, .score-area, .message-area {
+            margin-bottom: 20px;
+            font-size: 1.5em; /* Increased font size */
+            color: #2c3e50;
+        }
+        .score-area span {
+            font-weight: bold;
+            color: #e67e22;
+        }
+        .balloon-area {
+            height: 400px; /* Increased height for more balloon travel */
+            position: relative;
+            border: 2px dashed #3498db;
+            border-radius: 10px;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M25 50 C25 25 75 25 75 50 C75 75 25 75 25 50 Z' fill='rgba(255,255,255,0.1)'/%3E%3Cpath d='M50 25 C25 25 25 75 50 75 C75 75 75 25 50 25 Z' fill='rgba(255,255,255,0.05)'/%3E%3C/svg%3E"); /* Subtle cloud pattern */
+            background-size: 50px 50px;
+            overflow: hidden; /* Balloons should not appear outside this box */
+        }
+        .balloon {
+            position: absolute;
+            bottom: -100px; /* Start below the visible area */
+            width: 80px; /* Increased balloon size */
+            height: 100px; /* Increased balloon size */
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; /* Balloon shape */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8em; /* Increased number size */
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: transform 0.2s ease-out, bottom 8s linear; /* Adjusted rise time slightly */
+            box-shadow: inset -5px -5px 10px rgba(0,0,0,0.2), 0 5px 10px rgba(0,0,0,0.3);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        .balloon::after { /* Balloon string */
+            content: '';
+            position: absolute;
+            bottom: -20px; /* Position string below balloon */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 2px;
+            height: 25px; /* String length */
+            background-color: #555;
+        }
+
+        .balloon:hover {
+            transform: scale(1.1);
+        }
+        .start-button {
+            background-color: #2ecc71; /* Green */
+            color: white;
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px #27ae60;
+            transition: all 0.1s ease-in-out;
+            margin-top: 20px;
+        }
+        .start-button:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px #27ae60;
+        }
+        .message-area {
+            min-height: 30px; /* Ensure space for messages */
+            font-size: 1.2em;
+        }
+        .message-correct {
+            color: #2ecc71; /* Green */
+        }
+        .message-incorrect {
+            color: #e74c3c; /* Red */
+        }
+
+        /* Cloud SVGs for background effect */
+        .cloud {
+            position: absolute;
+            opacity: 0.6;
+            pointer-events: none; /* Clouds should not interfere with clicks */
+            animation: drift 60s linear infinite;
+            z-index: -1; /* Ensure clouds are behind game container if body padding is small */
+        }
+
+        .cloud.c1 {
+            width: 150px;
+            height: auto;
+            top: 10%;
+            left: -150px; /* Start off-screen */
+        }
+        .cloud.c2 {
+            width: 100px;
+            height: auto;
+            top: 30%;
+            left: -100px; /* Start off-screen */
+            animation-delay: -15s; /* Stagger animation */
+        }
+        .cloud.c3 {
+            width: 200px;
+            height: auto;
+            top: 60%;
+            left: -200px; /* Start off-screen */
+            animation-delay: -30s;
+        }
+         .cloud.c4 {
+            width: 120px;
+            height: auto;
+            top: 80%;
+            left: -120px; /* Start off-screen */
+            animation-delay: -45s;
+        }
+
+
+        @keyframes drift {
+            0% {
+                transform: translateX(0px);
+            }
+            100% {
+                transform: translateX(calc(100vw + 200px)); /* Drift across the entire viewport and then some */
+            }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .problem-area, .score-area {
+                font-size: 1.2em;
+            }
+            .balloon {
+                width: 60px;
+                height: 75px;
+                font-size: 1.5em;
+            }
+            .balloon-area {
+                height: 300px;
+            }
+            .start-button {
+                font-size: 1em;
+                padding: 10px 20px;
+            }
+            body {
+                padding: 10px; /* Reduce padding on smaller screens */
+            }
+        }
+    </style>
+</head>
+<body>
+    <svg class="cloud c1" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 50 Q0 50 0 40 Q0 20 20 20 Q25 10 35 15 Q50 0 65 15 Q75 10 80 20 Q100 20 100 40 Q100 50 90 50 Z" fill="#FFFFFF"/>
+    </svg>
+    <svg class="cloud c2" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 50 Q0 50 0 40 Q0 20 20 20 Q25 10 35 15 Q50 0 65 15 Q75 10 80 20 Q100 20 100 40 Q100 50 90 50 Z" fill="#F0F8FF"/>
+    </svg>
+     <svg class="cloud c3" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 50 Q0 50 0 40 Q0 20 20 20 Q25 10 35 15 Q50 0 65 15 Q75 10 80 20 Q100 20 100 40 Q100 50 90 50 Z" fill="#FFFFFF"/>
+    </svg>
+    <svg class="cloud c4" viewBox="0 0 100 60" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 50 Q0 50 0 40 Q0 20 20 20 Q25 10 35 15 Q50 0 65 15 Q75 10 80 20 Q100 20 100 40 Q100 50 90 50 Z" fill="#F0F8FF"/>
+    </svg>
+
+    <div class="game-container">
+        <h1 class="text-3xl font-bold mb-6 text-blue-600">Balloon Pop Math!</h1>
+        <div class="problem-area" id="problemArea">Solve: 5 + 3 = ?</div>
+        <div class="score-area">Score: <span id="score">0</span></div>
+        <div class="message-area" id="messageArea">Click the balloon with the correct answer!</div>
+
+        <div class="balloon-area" id="balloonArea">
+            </div>
+
+        <button class="start-button" id="startButton">Start Game</button>
+    </div>
+
+    <script>
+        // DOM Elements
+        const problemArea = document.getElementById('problemArea');
+        const scoreDisplay = document.getElementById('score');
+        const messageArea = document.getElementById('messageArea');
+        const balloonArea = document.getElementById('balloonArea');
+        const startButton = document.getElementById('startButton');
+
+        // Game State
+        let score = 0;
+        let currentProblem = { num1: 0, num2: 0, answer: 0 };
+        let balloons = []; // Array to hold balloon DOM elements and their timeouts
+        let gameActive = false;
+        const numBalloons = 5; // Number of balloons to display
+        const balloonColors = ['#e74c3c', '#3498db', '#f1c40f', '#9b59b6', '#2ecc71', '#e67e22', '#1abc9c']; // Red, Blue, Yellow, Purple, Green, Orange, Turquoise
+        const balloonRiseTimeConfig = 8000; // Time in ms for balloons to rise to the top (consistent variable name)
+
+        // --- Game Logic ---
+
+        // Function to generate a new addition problem
+        function generateProblem() {
+            currentProblem.num1 = Math.floor(Math.random() * 10) + 1; // Numbers between 1 and 10
+            currentProblem.num2 = Math.floor(Math.random() * 10) + 1;
+            currentProblem.answer = currentProblem.num1 + currentProblem.num2;
+            problemArea.textContent = `Solve: ${currentProblem.num1} + ${currentProblem.num2} = ?`;
+        }
+        
+        // Function to clear all active timeouts for balloons
+        function clearBalloonTimeouts() {
+            balloons.forEach(balloonEntry => {
+                if (balloonEntry.riseTimeout) clearTimeout(balloonEntry.riseTimeout);
+                if (balloonEntry.removeTimeout) clearTimeout(balloonEntry.removeTimeout);
+            });
+            balloons = []; // Reset the array
+        }
+
+
+        // Function to create and display balloons
+        function createBalloons() {
+            balloonArea.innerHTML = ''; // Clear previous balloon elements from DOM
+            clearBalloonTimeouts(); // Clear any existing timeouts before creating new ones
+
+            const answers = new Set();
+            answers.add(currentProblem.answer);
+
+            while (answers.size < numBalloons) {
+                let wrongAnswer;
+                const offset = Math.floor(Math.random() * 5) + 1;
+                if (Math.random() < 0.5) {
+                    wrongAnswer = currentProblem.answer + offset;
+                } else {
+                    wrongAnswer = currentProblem.answer - offset;
+                }
+                if (wrongAnswer > 0 && wrongAnswer !== currentProblem.answer) {
+                    answers.add(wrongAnswer);
+                } else {
+                    answers.add(Math.floor(Math.random() * 20) + 1); // Fallback
+                }
+            }
+
+            const answerArray = Array.from(answers);
+            shuffleArray(answerArray);
+
+            answerArray.forEach((num, index) => {
+                const balloon = document.createElement('div');
+                balloon.classList.add('balloon');
+                balloon.textContent = num;
+                balloon.style.backgroundColor = balloonColors[index % balloonColors.length];
+                
+                // Ensure balloonArea.clientWidth is available, might need a slight delay or check
+                let balloonLeftPosition = Math.random() * (balloonArea.clientWidth - 80);
+                if (balloonArea.clientWidth === 0) { // Fallback if clientWidth is not ready
+                    balloonLeftPosition = Math.random() * (parseFloat(getComputedStyle(balloonArea).width) - 80);
+                }
+                balloon.style.left = `${Math.max(0, balloonLeftPosition)}px`; // Ensure not negative
+
+                balloon.addEventListener('click', () => handleBalloonClick(num, balloon));
+                balloonArea.appendChild(balloon);
+                
+                const balloonEntry = { element: balloon, riseTimeout: null, removeTimeout: null };
+
+                // Animate balloon rising
+                balloonEntry.riseTimeout = setTimeout(() => {
+                    if (gameActive && balloon.parentElement) {
+                        balloon.style.bottom = `${balloonArea.clientHeight + 20}px`;
+                    }
+                }, 100);
+
+                // Handle balloon going off screen
+                balloonEntry.removeTimeout = setTimeout(() => {
+                    if (gameActive && balloon.parentElement === balloonArea) {
+                        if (parseInt(balloon.textContent) === currentProblem.answer) {
+                            messageArea.textContent = "Oops! The answer floated away. Try the next one!";
+                            messageArea.className = 'message-area message-incorrect';
+                            // Disable further interaction for this round as answer is lost
+                            balloons.forEach(bEntry => bEntry.element.style.pointerEvents = 'none');
+                            setTimeout(nextTurn, 1500);
+                        } else {
+                             // Only remove if it's not the one that triggered "floated away"
+                            if (balloon.parentElement) balloon.remove();
+                        }
+                    } else if (balloon.parentElement) {
+                        // If game became inactive or balloon was already handled, just ensure removal
+                        balloon.remove();
+                    }
+                }, balloonRiseTimeConfig + 500);
+                balloons.push(balloonEntry);
+            });
+        }
+
+        // Fisher-Yates shuffle algorithm
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        // Handle balloon click
+        function handleBalloonClick(numberClicked, balloonElement) {
+            if (!gameActive || !balloonElement.parentElement) return; // Check if balloon still exists
+
+            // Prevent further clicks on all balloons for this round immediately
+            balloons.forEach(bEntry => {
+                if (bEntry.element) bEntry.element.style.pointerEvents = 'none';
+            });
+
+
+            if (numberClicked === currentProblem.answer) {
+                score++;
+                scoreDisplay.textContent = score;
+                messageArea.textContent = 'Correct! 🎉';
+                messageArea.className = 'message-area message-correct';
+                
+                // Clear timeouts for the popped balloon
+                const poppedBalloonEntry = balloons.find(b => b.element === balloonElement);
+                if (poppedBalloonEntry) {
+                    if (poppedBalloonEntry.riseTimeout) clearTimeout(poppedBalloonEntry.riseTimeout);
+                    if (poppedBalloonEntry.removeTimeout) clearTimeout(poppedBalloonEntry.removeTimeout);
+                }
+
+                // Pop effect
+                balloonElement.style.transform = 'scale(1.5)';
+                balloonElement.style.opacity = '0';
+                // Remove other balloons and move to next turn
+                setTimeout(() => {
+                    if (balloonElement.parentElement) balloonElement.remove();
+                    // Clear remaining balloons visually and from logic
+                    balloons.forEach(bEntry => {
+                        if (bEntry.element !== balloonElement && bEntry.element.parentElement) {
+                            bEntry.element.remove();
+                        }
+                    });
+                    clearBalloonTimeouts(); // Ensure all timeouts are gone
+                    nextTurn();
+                }, 300);
+            } else {
+                messageArea.textContent = 'Try Again! 😟';
+                messageArea.className = 'message-area message-incorrect';
+                balloonElement.style.animation = 'shake 0.5s';
+                
+                setTimeout(() => {
+                    balloonElement.style.animation = '';
+                    // Re-enable clicks only on balloons that haven't been popped or are not the one clicked
+                    balloons.forEach(bEntry => {
+                         if (bEntry.element && bEntry.element.parentElement) { // Check if element still exists
+                            bEntry.element.style.pointerEvents = 'auto';
+                         }
+                    });
+                }, 500);
+            }
+        }
+
+        // Move to the next turn/problem
+        function nextTurn() {
+            if (!gameActive) return; // Should not proceed if game became inactive
+            generateProblem();
+            createBalloons(); // This will re-enable pointer events on new balloons
+            // Message area might have been set by "floated away", reset if needed or rely on createBalloons
+        }
+
+        // Start the game
+        function startGame() {
+            gameActive = true;
+            score = 0;
+            scoreDisplay.textContent = score;
+            messageArea.textContent = 'Click the balloon with the correct answer!';
+            messageArea.className = 'message-area';
+            startButton.textContent = 'Restart Game';
+            startButton.style.backgroundColor = '#e74c3c';
+            
+            clearBalloonTimeouts(); // Clear any leftover timeouts from a previous game session
+            balloonArea.innerHTML = ''; // Clear any leftover balloon elements
+
+            nextTurn();
+        }
+
+        // Event Listener for start button
+        startButton.addEventListener('click', () => {
+            // No need to check gameActive here, startGame handles re-initialization
+            startGame();
+        });
+
+        // Add a simple shake animation for incorrect clicks
+        const styleSheet = document.createElement("style");
+        styleSheet.type = "text/css";
+        styleSheet.innerText = `
+            @keyframes shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-5px); }
+                50% { transform: translateX(5px); }
+                75% { transform: translateX(-5px); }
+            }
+        `;
+        document.head.appendChild(styleSheet);
+
+        // Initial message
+        messageArea.textContent = 'Press "Start Game" to begin!';
+        
+        // Initial setup on window load
+        window.onload = function () {
+            console.log("Game ready. Press Start Game.");
+            // It's good practice to ensure balloonArea has dimensions before first createBalloons.
+            // However, createBalloons is only called after startGame, which is user-triggered.
+        }
+
+    </script>
+</body>
+</html>

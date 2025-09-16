@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockly Coding Adventure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            touch-action: none; /* Prevents scrolling on mobile when dragging */
+        }
+
+        /* Styling for the draggable blocks */
+        .block {
+            cursor: grab;
+            transition: all 0.2s ease-in-out;
+            user-select: none;
+        }
+
+        .block:active {
+            cursor: grabbing;
+            transform: scale(1.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
+        }
+        
+        /* The ghost class is used by SortableJS to style the placeholder */
+        .block.ghost {
+            opacity: 0.5;
+            background: #c8ebfb;
+        }
+
+        /* Highlighting the currently executing block */
+        .executing {
+            box-shadow: 0 0 15px 5px #fef08a; /* yellow-200 glow */
+            transform: scale(1.02);
+        }
+
+        /* Container for nested blocks */
+        .block-container {
+            min-height: 40px;
+            border: 2px dashed rgba(0, 0, 0, 0.1);
+            border-radius: 0.25rem;
+            padding: 8px;
+            margin-top: 4px;
+            background-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        /* Grid styling for the game world */
+        #grid-container {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            width: 100%;
+            height: 100%;
+            background-color: #a7f3d0; /* A light green for the ground */
+            border: 4px solid #34495e;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .grid-cell {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #95e4bc;
+            box-sizing: border-box;
+            position: relative;
+        }
+        
+        .wall { background-color: #34495e; }
+        .goal { background-color: #f1c40f; }
+        .coin::after, .star::after {
+            content: '🪙';
+            font-size: 1.5rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+        }
+        .star::after {
+            content: '⭐';
+        }
+
+        /* Character styling and animation */
+        #character {
+            position: absolute;
+            width: 10%; /* Corresponds to grid size */
+            height: 10%; /* Corresponds to grid size */
+            transition: all 0.3s ease-in-out;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            z-index: 10;
+        }
+
+        #start-screen-overlay .mobile-only-disclaimer {
+            display: none;
+        }
+
+        /* Show rotate message only on portrait mobile */
+        @media (orientation: portrait) and (max-width: 767px) {
+            #start-screen-overlay .mobile-only-disclaimer {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 overflow-hidden h-screen">
+
+    <!-- Start Screen Overlay / Disclaimer -->
+    <div id="start-screen-overlay" class="fixed inset-0 bg-gray-800 bg-opacity-95 text-white flex flex-col items-center justify-center z-50 p-4 text-center">
+        <h1 class="text-5xl font-bold mb-4">Blockly Coding Adventure</h1>
+        <p class="text-xl mb-8">Welcome! Get ready to learn the fundamentals of code.</p>
+        
+        <!-- Mobile-only instruction -->
+        <div class="mobile-only-disclaimer mb-8 flex-col items-center justify-center">
+             <svg class="w-16 h-16 mb-4 text-gray-400 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+             </svg>
+             <h2 class="text-2xl font-bold">Please Tilt Phone</h2>
+             <p class="text-lg">This game is best played in landscape mode.</p>
+        </div>
+    
+        <button id="start-game-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-lg text-2xl transition-transform active:scale-95">
+            Start Game
+        </button>
+    </div>
+
+
+    <!-- Main Game Container -->
+    <div class="flex flex-col md:flex-row h-screen p-4 gap-4">
+
+        <!-- Left Panel: Instructions & Toolbox -->
+        <div class="flex flex-col w-full md:w-1/4 bg-white rounded-lg shadow-xl p-4 space-y-4 overflow-y-auto">
+            <div id="level-info" class="border-b pb-4">
+                <h2 class="text-2xl font-bold text-blue-600" id="level-title"></h2>
+                <p class="text-sm text-gray-600 mt-1" id="level-instructions"></p>
+            </div>
+            <div id="toolbox-container">
+                <h3 class="font-semibold mb-2">Toolbox</h3>
+                <div id="toolbox" class="space-y-2">
+                    <!-- Blocks will be dynamically inserted here -->
+                </div>
+            </div>
+             <div id="level-selector-container" class="mt-auto pt-4 border-t">
+                 <a href="#" id="home-btn" class="block bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition duration-300 shadow-md text-center mb-4">
+                    🏠 Go to Home
+                </a>
+                 <h3 class="font-semibold mb-2">Levels</h3>
+                 <div id="level-buttons" class="grid grid-cols-4 gap-2">
+                     <!-- Level buttons will be generated here -->
+                 </div>
+            </div>
+        </div>
+
+        <!-- Middle Panel: Workspace & Controls -->
+        <div class="flex flex-col w-full md:w-1/4 bg-gray-50 rounded-lg shadow-xl p-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-semibold text-lg">Workspace</h3>
+                <div class="flex space-x-2">
+                    <button id="run-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 shadow-md">
+                        ▶️ Run
+                    </button>
+                    <button id="reset-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 shadow-md">
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+            <div id="workspace" class="flex-grow bg-white border-2 border-dashed border-gray-300 rounded-lg p-4 overflow-y-auto">
+                <!-- Drop blocks here -->
+            </div>
+        </div>
+
+        <!-- Right Panel: Game World -->
+        <div class="w-full md:w-1/2 bg-white rounded-lg shadow-xl p-4 flex items-center justify-center">
+            <div class="aspect-square w-full max-w-[400px] mx-auto">
+                 <div id="grid-container">
+                    <div id="character">🤖</div>
+                    <!-- Grid cells will be dynamically inserted here -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Success Modal -->
+    <div id="success-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-2xl p-8 text-center max-w-sm mx-auto transform transition-all scale-95 opacity-0">
+            <h2 class="text-3xl font-bold text-green-500 mb-4">Great Job!</h2>
+            <p id="success-message" class="text-gray-700 mb-6"></p>
+            <button id="next-level-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition duration-300">
+                Next Level
+            </button>
+        </div>
+    </div>
+    
+    <!-- Final Challenge Complete Modal -->
+    <div id="final-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-2xl p-8 text-center max-w-sm mx-auto transform transition-all scale-95 opacity-0">
+            <h2 class="text-3xl font-bold text-yellow-500 mb-4">Congratulations!</h2>
+            <p class="text-gray-700 mb-6">You've completed all the levels and learned the fundamentals of coding! You are a true coding adventurer!</p>
+            <button id="restart-game-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-6 rounded-lg transition duration-300">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Lightweight SortableJS library for drag and drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- START SCREEN LOGIC ---
+            const startOverlay = document.getElementById('start-screen-overlay');
+            const startGameBtn = document.getElementById('start-game-btn');
+            
+            if (startGameBtn) {
+                startGameBtn.addEventListener('click', () => {
+                    startOverlay.style.display = 'none';
+                });
+            }
+
+            // --- DOM ELEMENTS ---
+            const levelTitle = document.getElementById('level-title');
+            const levelInstructions = document.getElementById('level-instructions');
+            const toolbox = document.getElementById('toolbox');
+            const workspace = document.getElementById('workspace');
+            const gridContainer = document.getElementById('grid-container');
+            const character = document.getElementById('character');
+            const runBtn = document.getElementById('run-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const successModal = document.getElementById('success-modal');
+            const successMessage = document.getElementById('success-message');
+            const nextLevelBtn = document.getElementById('next-level-btn');
+            const finalModal = document.getElementById('final-modal');
+            const restartGameBtn = document.getElementById('restart-game-btn');
+            const levelButtonsContainer = document.getElementById('level-buttons');
+
+            // --- GAME STATE ---
+            let currentLevel = 1;
+            let unlockedLevels = 1;
+            let isRunning = false;
+            let characterState = { x: 0, y: 0, dir: 'E' }; // E, S, W, N
+            let variables = {};
+            let functions = {};
+
+            // Direction vectors for movement
+            const DIRS = {
+                'N': { x: 0, y: -1 },
+                'E': { x: 1, y: 0 },
+                'S': { x: 0, y: 1 },
+                'W': { x: -1, y: 0 }
+            };
+
+            const turnRightMap = { 'N': 'E', 'E': 'S', 'S': 'W', 'W': 'N' };
+            const turnLeftMap = { 'N': 'W', 'W': 'S', 'S': 'E', 'E': 'N' };
+            const rotationMap = { 'E': 0, 'S': 90, 'W': 180, 'N': -90 };
+
+            // --- LEVEL DEFINITIONS ---
+            const levels = {
+                1: {
+                    title: "Move Forward",
+                    concept: "Sequencing",
+                    instructions: "Move the robot to the yellow goal! Drag 3 'Move Forward' blocks into the workspace.",
+                    gridSize: 10,
+                    start: { x: 1, y: 5, dir: 'E' },
+                    layout: [
+                        { x: 5, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['move'],
+                    solutionCheck: (state) => state.grid[5][5].type === 'character'
+                },
+                2: {
+                    title: "Turn and Move",
+                    concept: "Sequencing with multiple commands.",
+                    instructions: "The goal is down below. Move forward, turn right, and move forward again.",
+                    start: { x: 2, y: 2, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 5, y: 2, type: 'wall' },
+                        { x: 5, y: 3, type: 'wall' },
+                        { x: 5, y: 4, type: 'wall' },
+                        { x: 5, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'turnRight'],
+                    solutionCheck: (state) => state.grid[5][5].type === 'character'
+                },
+                3: {
+                    title: "Repeat Once",
+                    concept: "Introduction to loops.",
+                    instructions: "That's a long path! Instead of using 5 'Move' blocks, use a 'Repeat' block.",
+                    start: { x: 1, y: 5, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 7, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'repeat'],
+                    solutionCheck: (state) => state.grid[5][7].type === 'character'
+                },
+                4: {
+                    title: "Nested Movement",
+                    concept: "Nested loops.",
+                    instructions: "Let's draw a square! Use a repeat block inside another repeat block. Move and turn inside.",
+                    start: { x: 3, y: 3, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 3, y: 3, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'turnRight', 'repeat'],
+                    // Solution check verifies the character returns to the start after moving
+                    solutionCheck: (state) => state.character.x === 3 && state.character.y === 3 && state.moveCount >= 16
+                },
+                5: {
+                    title: "Conditional Check",
+                    concept: "If statements.",
+                    instructions: "Navigate the simple maze. If there's a wall ahead, turn right. Otherwise, keep moving.",
+                    start: { x: 1, y: 1, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 4, y: 1, type: 'wall' }, { x: 4, y: 2, type: 'wall' }, { x: 4, y: 3, type: 'wall' },
+                        { x: 2, y: 3, type: 'wall' }, { x: 3, y: 3, type: 'wall' },
+                        { x: 2, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'turnRight', 'if_wall_ahead', 'repeat'],
+                    solutionCheck: (state) => state.grid[5][2].type === 'character'
+                },
+                 6: {
+                    title: "If-Else Choices",
+                    concept: "If-Else branching.",
+                    instructions: "This path splits. If the path to the right is clear, go right. Else, go forward.",
+                    start: { x: 1, y: 5, dir: 'N' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 1, y: 3, type: 'wall' }, { x: 2, y: 3, type: 'wall' }, { x: 3, y: 3, type: 'wall' }, { x: 4, y: 3, type: 'wall' },
+                        { x: 5, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'turnRight', 'turnLeft', 'if_else_path_right'],
+                    solutionCheck: (state) => state.grid[5][5].type === 'character'
+                },
+                7: {
+                    title: "Collect Items",
+                    concept: "Loops and conditionals.",
+                    instructions: "Collect all 3 coins. Loop down the path and use an 'If coin ahead' block to grab them.",
+                    start: { x: 5, y: 1, dir: 'S' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 5, y: 3, type: 'coin' }, { x: 5, y: 5, type: 'coin' }, { x: 5, y: 7, type: 'coin' },
+                        { x: 5, y: 8, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'if_coin_ahead', 'repeat'],
+                    solutionCheck: (state) => state.grid[8][5].type === 'character' && state.collectedItems === 3
+                },
+                8: {
+                    title: "Variables (Counters)",
+                    concept: "Using variables.",
+                    instructions: "Use a variable named 'stars' to count the collected stars. The goal opens when stars = 5.",
+                    start: { x: 1, y: 1, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 2, y: 1, type: 'star' }, { x: 4, y: 1, type: 'star' }, { x: 6, y: 1, type: 'star' }, { x: 8, y: 1, type: 'star' },
+                        { x: 5, y: 3, type: 'star' },
+                        { x: 1, y: 3, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'turnRight', 'turnLeft', 'if_star_ahead', 'set_variable', 'increment_variable', 'repeat'],
+                    solutionCheck: (state) => state.grid[3][1].type === 'character' && (state.vars.stars === 5)
+                },
+                9: {
+                    title: "Simple Function",
+                    concept: "Defining a function.",
+                    instructions: "It's repetitive to draw squares. Create a function 'drawSquare' and call it twice to outline a house.",
+                    start: { x: 1, y: 7, dir: 'N' },
+                    gridSize: 10,
+                    layout: [ { x: 1, y: 7, type: 'goal' }],
+                    availableBlocks: ['move', 'turnRight', 'repeat', 'function_def', 'function_call'],
+                    solutionCheck: (state) => state.character.x === 1 && state.character.y === 7 && state.moveCount >= 16 // Two squares
+                },
+                 10: {
+                    title: "Functions with Parameters",
+                    concept: "Functions with parameters.",
+                    instructions: "Create a function 'moveSteps' that takes a number. Use it to move different distances easily.",
+                    start: { x: 1, y: 1, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 4, y: 1, type: 'wall' }, { x: 4, y: 2, type: 'wall' }, { x: 4, y: 3, type: 'wall' },
+                        { x: 8, y: 3, type: 'goal' }
+                    ],
+                    availableBlocks: ['turnRight', 'function_def_param', 'function_call_param'],
+                     solutionCheck: (state) => state.grid[3][8].type === 'character'
+                },
+                11: {
+                    title: "While Loops",
+                    concept: "While condition is true.",
+                    instructions: "You don't know how far the goal is. Use a 'While not at goal' block to keep moving.",
+                    start: { x: 1, y: 5, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                         { x: 8, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'while_not_at_goal'],
+                    solutionCheck: (state) => state.grid[5][8].type === 'character'
+                },
+                12: {
+                    title: "Events",
+                    concept: "Event-driven coding.",
+                    instructions: "This time, YOU control the robot! Press the 'Space' key to make the robot jump over the wall.",
+                    start: { x: 2, y: 5, dir: 'E' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 5, y: 5, type: 'wall' },
+                        { x: 8, y: 5, type: 'goal' }
+                    ],
+                    availableBlocks: ['on_key_press'],
+                    solutionCheck: (state) => state.grid[5][8].type === 'character'
+                },
+                13: {
+                    title: "Final Challenge",
+                    concept: "Combining all concepts.",
+                    instructions: "Navigate the maze, collect all 5 stars, and reach the goal. Use everything you've learned!",
+                    start: { x: 1, y: 1, dir: 'S' },
+                    gridSize: 10,
+                    layout: [
+                        { x: 1, y: 3, type: 'star' }, { x: 3, y: 5, type: 'star' }, { x: 5, y: 2, type: 'star' }, { x: 7, y: 7, type: 'star' }, { x: 8, y: 1, type: 'star' },
+                        { x: 2, y: 1, type: 'wall' }, { x: 2, y: 2, type: 'wall' }, { x: 4, y: 2, type: 'wall' }, { x: 4, y: 3, type: 'wall' }, { x: 4, y: 4, type: 'wall' }, { x: 4, y: 5, type: 'wall' }, { x: 6, y: 5, type: 'wall' }, { x: 6, y: 6, type: 'wall' }, { x: 6, y: 7, type: 'wall' }, { x: 8, y: 3, type: 'wall' }, { x: 8, y: 4, type: 'wall' },
+                        { x: 8, y: 8, type: 'goal' }
+                    ],
+                    availableBlocks: ['move', 'turnRight', 'turnLeft', 'repeat', 'if_wall_ahead', 'if_star_ahead', 'set_variable', 'increment_variable', 'function_def', 'function_call'],
+                     solutionCheck: (state) => state.grid[8][8].type === 'character' && state.collectedItems === 5
+                }
+            };
+
+            // --- BLOCK DEFINITIONS ---
+            const blockTypes = {
+                'move': { html: `<div class="block bg-sky-500 text-white p-2 rounded-md shadow flex items-center gap-2" data-type="move"><span class="text-lg">➡️</span><span>Move Forward</span></div>` },
+                'turnRight': { html: `<div class="block bg-sky-500 text-white p-2 rounded-md shadow flex items-center gap-2" data-type="turnRight"><span class="text-lg">↪️</span><span>Turn Right</span></div>` },
+                'turnLeft': { html: `<div class="block bg-sky-500 text-white p-2 rounded-md shadow flex items-center gap-2" data-type="turnLeft"><span class="text-lg">↩️</span><span>Turn Left</span></div>` },
+                'repeat': { html: `<div class="block bg-amber-500 text-white p-2 rounded-md shadow" data-type="repeat"><div class="flex items-center gap-2 flex-wrap"><span>🔄</span><span>Repeat</span><input type="number" class="w-12 text-black rounded text-center" value="4" min="1"><span>times</span></div><div class="block-container mt-2 bg-amber-100"></div></div>` },
+                'if_wall_ahead': { html: `<div class="block bg-indigo-500 text-white p-2 rounded-md shadow" data-type="if_wall_ahead"><div class="flex items-center gap-2"><span>🧱</span><span>If Wall Ahead</span></div><div class="block-container mt-2 bg-indigo-100"></div></div>` },
+                'if_else_path_right': { html: `<div class="block bg-indigo-500 text-white p-2 rounded-md shadow" data-type="if_else_path_right"><div class="flex items-center gap-2"><span>🛣️</span><span>If Path Right is Clear</span></div><div class="block-container mt-2 bg-indigo-100 p-2"></div><span class="font-semibold">Else</span><div class="block-container mt-2 bg-gray-200 p-2"></div></div>`},
+                'if_coin_ahead': { html: `<div class="block bg-indigo-500 text-white p-2 rounded-md shadow" data-type="if_coin_ahead"><div class="flex items-center gap-2"><span>🪙</span><span>If Coin Ahead</span></div><div class="block-container mt-2 bg-indigo-100"></div></div>` },
+                'if_star_ahead': { html: `<div class="block bg-indigo-500 text-white p-2 rounded-md shadow" data-type="if_star_ahead"><div class="flex items-center gap-2"><span>⭐</span><span>If Star Ahead</span></div><div class="block-container mt-2 bg-indigo-100"></div></div>` },
+                'set_variable': { html: `<div class="block bg-emerald-500 text-white p-2 rounded-md shadow flex items-center gap-2 flex-wrap" data-type="set_variable"><span>✏️</span><span>Set</span><input type="text" class="w-20 text-black rounded text-center" value="stars"><span>to</span><input type="number" class="w-12 text-black rounded text-center" value="0"></div>` },
+                'increment_variable': { html: `<div class="block bg-emerald-500 text-white p-2 rounded-md shadow flex items-center gap-2 flex-wrap" data-type="increment_variable"><span>➕</span><span>Increment</span><input type="text" class="w-20 text-black rounded text-center" value="stars"></div>` },
+                'function_def': { html: `<div class="block bg-rose-500 text-white p-2 rounded-md shadow" data-type="function_def"><div class="flex items-center gap-2"><span>⚙️</span><span>Define function</span><input type="text" class="w-24 text-black rounded text-center" value="myFunction"></div><div class="block-container mt-2 bg-rose-100"></div></div>` },
+                'function_call': { html: `<div class="block bg-rose-400 text-white p-2 rounded-md shadow flex items-center gap-2" data-type="function_call"><span>▶️</span><span>Call function</span><input type="text" class="w-24 text-black rounded text-center" value="myFunction"></div>` },
+                'function_def_param': { html: `<div class="block bg-rose-500 text-white p-2 rounded-md shadow" data-type="function_def_param"><div class="flex items-center gap-2"><span>⚙️</span><span>Define function moveSteps(steps)</span></div><div class="block-container mt-2 bg-rose-100"><div class="block bg-sky-500 text-white p-2 rounded-md shadow flex items-center gap-2" data-type="move_param"><span class="text-lg">➡️</span><span>Move Forward 'steps' times</span></div></div></div>`},
+                'function_call_param': { html: `<div class="block bg-rose-400 text-white p-2 rounded-md shadow flex items-center gap-2 flex-wrap" data-type="function_call_param"><span>▶️</span><span>Call moveSteps(</span><input type="number" class="w-12 text-black rounded text-center" value="3"><span>)</span></div>` },
+                'while_not_at_goal': { html: `<div class="block bg-amber-500 text-white p-2 rounded-md shadow" data-type="while_not_at_goal"><div class="flex items-center gap-2"><span>🏁</span><span>While Not at Goal</span></div><div class="block-container mt-2 bg-amber-100"></div></div>` },
+                'on_key_press': { html: `<div class="block bg-yellow-400 text-gray-800 p-2 rounded-md shadow" data-type="on_key_press"><div class="flex items-center gap-2 flex-wrap"><span>⌨️</span><span>When</span><input type="text" class="w-20 text-black rounded text-center" value="space"><span>key is pressed</span></div><div class="block-container mt-2 bg-yellow-100"><div class="block bg-sky-400 text-white p-2 rounded-md shadow flex items-center gap-2" data-type="jump"><span class="text-lg">⏫</span><span>Jump Forward</span></div></div></div>` },
+            };
+
+
+            // --- GAME LOGIC ---
+
+            /**
+             * Initializes or loads a level
+             */
+            function loadLevel(levelNum) {
+                if (isRunning || !levels[levelNum]) return;
+
+                currentLevel = levelNum;
+                const levelData = levels[currentLevel];
+
+                // Update UI
+                levelTitle.textContent = `Level ${currentLevel}: ${levelData.title}`;
+                levelInstructions.textContent = levelData.instructions;
+                
+                // Clear and build toolbox
+                toolbox.innerHTML = '';
+                levelData.availableBlocks.forEach(blockType => {
+                    if(blockTypes[blockType]) {
+                        const blockDiv = document.createElement('div');
+                        blockDiv.innerHTML = blockTypes[blockType].html;
+                        toolbox.appendChild(blockDiv.firstChild);
+                    }
+                });
+
+                // Reset game state
+                reset();
+                updateLevelButtons();
+            }
+
+            /**
+             * Renders the game grid
+             */
+            function renderGrid() {
+                const levelData = levels[currentLevel];
+                gridContainer.innerHTML = '<div id="character">🤖</div>'; // Re-add character
+                gridContainer.style.gridTemplateColumns = `repeat(${levelData.gridSize}, 1fr)`;
+                gridContainer.style.gridTemplateRows = `repeat(${levelData.gridSize}, 1fr)`;
+
+                // Keep a reference to the character element
+                const charElement = gridContainer.querySelector('#character');
+
+                const gameGrid = Array(levelData.gridSize).fill(0).map(() => Array(levelData.gridSize).fill({type: 'empty'}));
+
+                levelData.layout.forEach(item => {
+                    if (gameGrid[item.y] && gameGrid[item.y][item.x]) {
+                        gameGrid[item.y][item.x] = { type: item.type };
+                    }
+                });
+                
+                // Draw cells
+                for (let y = 0; y < levelData.gridSize; y++) {
+                    for (let x = 0; x < levelData.gridSize; x++) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('grid-cell');
+                        if (gameGrid[y][x].type !== 'empty') {
+                            cell.classList.add(gameGrid[y][x].type);
+                        }
+                        gridContainer.appendChild(cell);
+                    }
+                }
+                 // Place character in its starting position
+                characterState = { ...levelData.start };
+                updateCharacterPosition();
+            }
+
+            function updateCharacterPosition() {
+                const charElement = document.getElementById('character');
+                const levelData = levels[currentLevel];
+                charElement.style.left = `${(characterState.x / levelData.gridSize) * 100}%`;
+                charElement.style.top = `${(characterState.y / levelData.gridSize) * 100}%`;
+                charElement.style.transform = `rotate(${rotationMap[characterState.dir]}deg)`;
+            }
+
+            /**
+             * Resets the current level state
+             */
+            function reset() {
+                if (isRunning) return;
+                workspace.innerHTML = '';
+                variables = {};
+                functions = {};
+                renderGrid();
+                 // Reset event listeners for event-based levels
+                document.removeEventListener('keydown', handleKeyPress);
+            }
+            
+            /**
+             * Update the level selection buttons state (locked/unlocked)
+             */
+            function updateLevelButtons() {
+                levelButtonsContainer.innerHTML = '';
+                for (let i = 1; i <= Object.keys(levels).length; i++) {
+                    const button = document.createElement('button');
+                    button.textContent = i;
+                    button.dataset.level = i;
+                    button.classList.add('p-2', 'rounded-lg', 'font-bold', 'transition-all');
+                    if (i <= unlockedLevels) {
+                        button.classList.add('bg-blue-500', 'text-white', 'hover:bg-blue-600');
+                        button.addEventListener('click', () => loadLevel(i));
+                    } else {
+                        button.classList.add('bg-gray-300', 'text-gray-500', 'cursor-not-allowed');
+                    }
+                    if (i === currentLevel) {
+                         button.classList.add('ring-4', 'ring-yellow-400');
+                    }
+                    levelButtonsContainer.appendChild(button);
+                }
+            }
+
+
+            // --- DRAG AND DROP LOGIC ---
+            
+            // Initialize SortableJS for toolbox (clone items)
+            new Sortable(toolbox, {
+                group: {
+                    name: 'shared',
+                    pull: 'clone',
+                    put: false
+                },
+                sort: false,
+                animation: 150,
+                ghostClass: 'ghost'
+            });
+
+            // Initialize SortableJS for workspace (main drop area)
+            new Sortable(workspace, {
+                group: 'shared',
+                animation: 150,
+                ghostClass: 'ghost',
+                onAdd: (evt) => {
+                    // When a block is added, make its nested containers sortable too
+                    initializeNested(evt.item);
+                }
+            });
+            
+            function initializeNested(item) {
+                const containers = item.querySelectorAll('.block-container');
+                containers.forEach(container => {
+                     new Sortable(container, {
+                        group: 'shared',
+                        animation: 150,
+                        ghostClass: 'ghost',
+                        onAdd: (evt) => initializeNested(evt.item)
+                    });
+                });
+            }
+
+
+            // --- BLOCK EXECUTION ENGINE ---
+
+            /**
+             * Sleep utility for async delays
+             */
+            function sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+
+            /**
+             * Parses and executes the blocks in a given container
+             */
+            async function executeBlocks(container) {
+                if (!container) return;
+                const blocks = Array.from(container.children);
+                for (const block of blocks) {
+                    if (!isRunning) break;
+                    
+                    // Highlight current block
+                    block.classList.add('executing');
+                    await sleep(400);
+
+                    const type = block.dataset.type;
+                    
+                    switch (type) {
+                        case 'move':
+                            await moveCharacter();
+                            break;
+                        case 'turnRight':
+                            characterState.dir = turnRightMap[characterState.dir];
+                            updateCharacterPosition();
+                            break;
+                        case 'turnLeft':
+                             characterState.dir = turnLeftMap[characterState.dir];
+                             updateCharacterPosition();
+                            break;
+                        case 'repeat': {
+                            const count = parseInt(block.querySelector('input').value) || 0;
+                            const innerContainer = block.querySelector('.block-container');
+                            for (let i = 0; i < count; i++) {
+                                await executeBlocks(innerContainer);
+                                if (!isRunning) break;
+                            }
+                            break;
+                        }
+                        case 'if_wall_ahead': {
+                             const innerContainer = block.querySelector('.block-container');
+                             if (isWallAhead()) {
+                                 await executeBlocks(innerContainer);
+                             }
+                             break;
+                        }
+                        case 'if_else_path_right': {
+                            const ifContainer = block.querySelectorAll('.block-container')[0];
+                            const elseContainer = block.querySelectorAll('.block-container')[1];
+                            const tempDir = turnRightMap[characterState.dir];
+                            if(isPathClear(tempDir)){
+                                await executeBlocks(ifContainer);
+                            } else {
+                                await executeBlocks(elseContainer);
+                            }
+                            break;
+                        }
+                        case 'if_coin_ahead': case 'if_star_ahead': {
+                            const innerContainer = block.querySelector('.block-container');
+                            if (isItemAhead(type.includes('coin') ? 'coin' : 'star')) {
+                                await executeBlocks(innerContainer);
+                            }
+                            break;
+                        }
+                        case 'set_variable': {
+                            const inputs = block.querySelectorAll('input');
+                            const varName = inputs[0].value;
+                            const varValue = parseInt(inputs[1].value);
+                            if (varName) variables[varName] = varValue;
+                            break;
+                        }
+                        case 'increment_variable': {
+                            const varName = block.querySelector('input').value;
+                            if (varName && typeof variables[varName] === 'number') {
+                                variables[varName]++;
+                            }
+                            break;
+                        }
+                        case 'function_def': {
+                            const name = block.querySelector('input').value;
+                            const innerContainer = block.querySelector('.block-container');
+                            if(name && innerContainer) {
+                                functions[name] = innerContainer;
+                            }
+                            break;
+                        }
+                        case 'function_call': {
+                            const name = block.querySelector('input').value;
+                            if(name && functions[name]) {
+                                await executeBlocks(functions[name]);
+                            }
+                            break;
+                        }
+                        case 'function_def_param':
+                            // For this simplified version, the definition is pre-linked.
+                            // In a real scenario, this would register the function.
+                            break;
+                        case 'function_call_param': {
+                            const steps = parseInt(block.querySelector('input').value);
+                            for (let i = 0; i < steps; i++) {
+                                await moveCharacter();
+                                if(!isRunning) break;
+                            }
+                            break;
+                        }
+                        case 'while_not_at_goal': {
+                            const innerContainer = block.querySelector('.block-container');
+                            let guard = 0;
+                            while (!isAtGoal() && guard < 100) {
+                                await executeBlocks(innerContainer);
+                                if (!isRunning) break;
+                                guard++;
+                            }
+                            break;
+                        }
+                        case 'on_key_press':
+                             // This is handled by an event listener, not direct execution.
+                             break;
+                    }
+
+                    block.classList.remove('executing');
+                    if (!isRunning) break;
+                }
+            }
+            
+            // --- CHARACTER ACTIONS & SENSORS ---
+
+            async function moveCharacter() {
+                const levelData = levels[currentLevel];
+                const move = DIRS[characterState.dir];
+                const nextX = characterState.x + move.x;
+                const nextY = characterState.y + move.y;
+                
+                // Check boundaries and walls
+                if (nextX < 0 || nextX >= levelData.gridSize || nextY < 0 || nextY >= levelData.gridSize || isWallAt(nextX, nextY)) {
+                    // Visual feedback for hitting wall
+                    character.style.animation = 'shake 0.5s';
+                    setTimeout(() => character.style.animation = '', 500);
+                    return;
+                }
+
+                characterState.x = nextX;
+                characterState.y = nextY;
+                
+                // Check for items to collect
+                const cellElement = getCell(nextX, nextY);
+                if (cellElement && (cellElement.classList.contains('coin') || cellElement.classList.contains('star'))) {
+                    cellElement.classList.remove('coin', 'star');
+                    if (!gameRuntimeState.collectedItems) gameRuntimeState.collectedItems = 0;
+                    gameRuntimeState.collectedItems++;
+                }
+
+                if (!gameRuntimeState.moveCount) gameRuntimeState.moveCount = 0;
+                gameRuntimeState.moveCount++;
+
+                updateCharacterPosition();
+                await sleep(100);
+            }
+            
+            function isWallAt(x, y) {
+                const cell = getCell(x, y);
+                return cell && cell.classList.contains('wall');
+            }
+            
+            function isWallAhead() {
+                const move = DIRS[characterState.dir];
+                return isWallAt(characterState.x + move.x, characterState.y + move.y);
+            }
+
+            function isItemAhead(itemType) {
+                 const move = DIRS[characterState.dir];
+                 const nextX = characterState.x + move.x;
+                 const nextY = characterState.y + move.y;
+                 const cell = getCell(nextX, nextY);
+                 return cell && cell.classList.contains(itemType);
+            }
+
+            function isAtGoal() {
+                const cell = getCell(characterState.x, characterState.y);
+                return cell && cell.classList.contains('goal');
+            }
+
+            function isPathClear(direction) {
+                const move = DIRS[direction];
+                const nextX = characterState.x + move.x;
+                const nextY = characterState.y + move.y;
+                return !isWallAt(nextX, nextY);
+            }
+            
+            function getCell(x, y) {
+                 const levelData = levels[currentLevel];
+                 if (x < 0 || x >= levelData.gridSize || y < 0 || y >= levelData.gridSize) return null;
+                 const index = y * levelData.gridSize + x + 1; // +1 to account for character element
+                 return gridContainer.children[index];
+            }
+
+
+            /**
+             * Main function to run the code
+             */
+            let gameRuntimeState = {};
+            async function run() {
+                if (isRunning) return;
+                isRunning = true;
+                runBtn.disabled = true;
+                runBtn.classList.add('opacity-50');
+
+                // Reset state before run
+                renderGrid();
+                variables = {};
+                functions = {};
+                gameRuntimeState = {
+                    collectedItems: 0,
+                    moveCount: 0
+                };
+                
+                // Handle special case for event-driven level
+                if (currentLevel === 12) {
+                    setupEventListener();
+                    // Don't auto-run, wait for events
+                } else {
+                     await executeBlocks(workspace);
+                     checkSolution();
+                }
+
+                if(currentLevel !== 12){
+                   isRunning = false;
+                   runBtn.disabled = false;
+                   runBtn.classList.remove('opacity-50');
+                }
+            }
+
+            /**
+             * Check if the level is solved
+             */
+            function checkSolution() {
+                const levelData = levels[currentLevel];
+                const currentGrid = [];
+                for (let y = 0; y < levelData.gridSize; y++) {
+                    currentGrid[y] = [];
+                    for (let x = 0; x < levelData.gridSize; x++) {
+                         currentGrid[y][x] = { type: getCell(x,y)?.classList.contains('goal') ? 'goal' : 'empty' };
+                    }
+                }
+                currentGrid[characterState.y][characterState.x].type = 'character';
+
+                const solutionState = {
+                    grid: currentGrid,
+                    character: characterState,
+                    vars: variables,
+                    collectedItems: gameRuntimeState.collectedItems,
+                    moveCount: gameRuntimeState.moveCount
+                };
+                
+                if (levelData.solutionCheck(solutionState)) {
+                    showSuccessModal();
+                } else {
+                    // Maybe add a "try again" message
+                }
+            }
+
+            // --- EVENT LISTENERS ---
+            
+            function setupEventListener() {
+                document.addEventListener('keydown', handleKeyPress);
+            }
+            
+            async function handleKeyPress(e) {
+                if (e.code.toLowerCase() !== 'space') return;
+                e.preventDefault();
+                
+                // Simplified "jump" action: move twice
+                await moveCharacter();
+                await moveCharacter();
+                
+                if (isAtGoal()) {
+                    checkSolution();
+                    document.removeEventListener('keydown', handleKeyPress);
+                     isRunning = false;
+                     runBtn.disabled = false;
+                     runBtn.classList.remove('opacity-50');
+                }
+            }
+            
+            runBtn.addEventListener('click', run);
+            resetBtn.addEventListener('click', reset);
+
+            nextLevelBtn.addEventListener('click', () => {
+                hideSuccessModal();
+                if (currentLevel < Object.keys(levels).length) {
+                    unlockedLevels = Math.max(unlockedLevels, currentLevel + 1);
+                    loadLevel(currentLevel + 1);
+                } else {
+                    showFinalModal();
+                }
+            });
+
+            restartGameBtn.addEventListener('click', () => {
+                 finalModal.style.display = 'none';
+                 finalModal.querySelector('div').classList.add('scale-95', 'opacity-0');
+                 currentLevel = 1;
+                 unlockedLevels = 1;
+                 loadLevel(1);
+            });
+
+
+            // --- MODALS ---
+            function showSuccessModal() {
+                successMessage.textContent = `You did it! You successfully used ${levels[currentLevel].concept}`;
+                successModal.style.display = 'flex';
+                setTimeout(() => {
+                    successModal.querySelector('div').classList.remove('scale-95', 'opacity-0');
+                }, 10);
+            }
+
+            function hideSuccessModal() {
+                successModal.querySelector('div').classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    successModal.style.display = 'none';
+                }, 200);
+            }
+            
+            function showFinalModal() {
+                finalModal.style.display = 'flex';
+                setTimeout(() => {
+                    finalModal.querySelector('div').classList.remove('scale-95', 'opacity-0');
+                }, 10);
+            }
+
+            // --- INITIALIZATION ---
+            loadLevel(1);
+
+        });
+    </script>
+</body>
+</html>
